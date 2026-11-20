@@ -167,7 +167,7 @@ http.createServer((req, res) => {
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'] });
     return res.end(`window.APP_CONFIG={CLIENT_ID:"${CLIENT_ID}",GAS_URL:"http://localhost:${PORT}/exec",` +
-      `DOMAIN:"rmutr.ac.th",PAGE_SIZE:50,EXPIRE_WARN_DAYS:90,LOW_STOCK:100,` +
+      `APP_NAME:"ระบบคลังทดสอบ",APP_TAGLINE:"คลังสารเคมีและวัสดุ (จำลอง)",DOMAIN:"rmutr.ac.th",PAGE_SIZE:50,EXPIRE_WARN_DAYS:90,LOW_STOCK:100,` +
       `PHOTO_URL:"/img/{id}",PHOTO_FALLBACK_URL:"/img/{id}",PHOTO_MAX_SIDE_PLACE:1600,PHOTO_MAX_SIDE_ITEM:1100,` +
       `PHOTO_MAX_PER_OWNER:8};`);
   }

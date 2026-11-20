@@ -232,7 +232,7 @@ var PHOTO_OWNERS = ['PLACE', 'MATERIAL', 'LOT'];
 
 var MAX_PHOTOS_PER_OWNER = 8;
 var MAX_PHOTO_BYTES      = 3.5 * 1024 * 1024;   // หลังย่อที่เบราว์เซอร์แล้ว
-var PHOTO_FOLDER_NAME    = 'HBT Stock Photos';
+var PHOTO_FOLDER_NAME    = 'Lab Chem Stock Photos';
 
 /** ขนาดปุ่มบนรูปที่เล็กที่สุดที่ยอมรับ (สัดส่วนของรูป) */
 var MIN_ZONE_SIZE = 0.01;

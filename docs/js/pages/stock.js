@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   pages/stock.js — หน้าค้นหาคลังวัตถุดิบ (หน้าหลัก)
+   pages/stock.js — หน้าค้นหาคลังสารเคมีและวัสดุ (หน้าหลัก)
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { api, can } from '../api.js';
@@ -33,14 +33,14 @@ let state = {
 export function render(root) {
   root.innerHTML = `
     <div class="view-head">
-      <h1>คลังวัตถุดิบ</h1>
-      <p>พิมพ์เพื่อค้นหาได้ทันที — ชื่อสาร ชื่อการค้า เลข CAS รหัสล็อต หรือรหัสเดิมที่ติดบนขวด</p>
+      <h1>คลังสารเคมีและวัสดุ</h1>
+      <p>พิมพ์เพื่อค้นหาได้ทันที — ชื่อสาร/ชื่อรายการ ชื่อการค้า เลข CAS รหัสล็อต หรือรหัสเดิมที่ติดบนขวด</p>
     </div>
 
     <div class="search-wrap">
       ${icon.search}
       <input id="q" type="search" autocomplete="off" spellcheck="false"
-             placeholder="ค้นหาวัตถุดิบ…" aria-label="ค้นหาวัตถุดิบ">
+             placeholder="ค้นหาสารเคมีและวัสดุ…" aria-label="ค้นหาสารเคมีและวัสดุ">
       <button id="q-clear" class="search-clear hidden" aria-label="ล้างคำค้น">×</button>
     </div>
 
@@ -310,7 +310,7 @@ function renderHead() {
   $('#thead-row').innerHTML =
     (can('staff') ? '<th style="width:30px"><span class="sr">เลือก</span></th>' : '') +
     '<th class="pic-col"><span class="sr">รูป</span></th>' +
-    th('name', 'รายการ / ชื่อการค้า') +
+    th('name', 'ชื่อสาร / ชื่อรายการ') +
     th('balance', 'คงเหลือ', 'right') +
     th('location', 'ที่เก็บ') +
     '<th>ผู้จำหน่าย</th>' +
@@ -328,7 +328,7 @@ function paint() {
     $('#tbody').innerHTML = '';
     $('#more').innerHTML = `
       <div class="empty">
-        <b>ไม่พบวัตถุดิบที่ตรงกับเงื่อนไข</b>
+        <b>ไม่พบสารเคมีหรือวัสดุที่ตรงกับเงื่อนไข</b>
         ลองลดคำค้นให้สั้นลง หรือกดล้างตัวกรอง
       </div>`;
     return;

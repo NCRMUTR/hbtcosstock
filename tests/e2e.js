@@ -94,8 +94,22 @@ const firstBalance = page =>
       : (fs.existsSync('/opt/pw-browsers/chromium') ? { executablePath: '/opt/pw-browsers/chromium' } : {}));
 
   // ═══════════════════════════════════════════════════════════════════════
-  sec('หน้าคลังวัตถุดิบ (เจ้าหน้าที่)');
+  sec('หน้าคลังสารเคมีและวัสดุ (เจ้าหน้าที่)');
   const page = await openAs(browser, 'staff');
+
+  // ชื่อระบบมาจาก config.js — ตัวจำลองตั้งชื่อ "ระบบคลังทดสอบ" ไว้ ถ้าเห็นค่าตั้งต้นแปลว่าเขียนชื่อตายไว้
+  ok(await page.title() === 'ระบบคลังทดสอบ', 'แท็บเบราว์เซอร์ใช้ชื่อระบบจาก config.js', await page.title());
+  ok((await page.textContent('.rail-mark')).includes('ระบบคลังทดสอบ'), 'แถบเมนูใช้ชื่อระบบจาก config.js');
+  ok((await page.textContent('.rail-mark')).includes('คลังสารเคมีและวัสดุ (จำลอง)'), 'คำอธิบายใต้ชื่อระบบมาจาก config.js');
+  ok(await page.textContent('.view-head h1') === 'คลังสารเคมีและวัสดุ', 'หัวหน้าคลังใช้คำใหม่',
+     await page.textContent('.view-head h1'));
+  ok(/คลังสารเคมีและวัสดุ/.test(await page.textContent('#rail-nav')), 'เมนูใช้คำว่า "คลังสารเคมีและวัสดุ"');
+  ok(await page.getAttribute('#q', 'placeholder') === 'ค้นหาสารเคมีและวัสดุ…', 'ช่องค้นหาใช้คำใหม่');
+  {
+    const seen = await page.evaluate(() => document.body.innerText);
+    ok(!/วัตถุดิบ|HBT Raw Material|เครื่องสำอาง|ชื่อ INCI/.test(seen), 'หน้าคลังไม่เหลือคำศัพท์จากระบบเดิม',
+       (seen.match(/.{0,20}(วัตถุดิบ|HBT Raw Material|เครื่องสำอาง|ชื่อ INCI).{0,20}/) || [''])[0]);
+  }
   const rowCount = await page.locator('#tbody tr').count();
   ok(rowCount > 0, 'ตารางมีข้อมูล', String(rowCount));
   ok(await page.locator('#rail-nav button').count() === 3, 'staff เห็นเมนู 3 ปุ่ม (แผนผัง + คลัง + ตัวเลือก)',
@@ -577,6 +591,51 @@ const firstBalance = page =>
     null, { timeout: 15000 });
   ok(true, 'admin ลบค่าออกจากรายการได้ (มีกล่องยืนยันก่อน)');
   await ap.screenshot({ path: SHOTS + '/06-settings-admin.png' });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  sec('นำเข้าไฟล์ "ดาวน์โหลด CSV" ของระบบเดิมผ่านหน้าจอ');
+  {
+    const FIX_V2 = path.join(__dirname, 'fixtures', 'hbt-v2-export.csv');
+    const onConfirm = d => d.accept();
+    ap.on('dialog', onConfirm);
+    await ap.click('#rail-nav [data-page="import"]');
+    await ap.waitForSelector('#file', { state: 'attached' });
+    ok(/สารเคมี/.test(await ap.textContent('#imp-kind-note')), 'หน้านำเข้าบอกว่าของจากระบบเดิมจะเป็นชนิดสารเคมี');
+
+    await ap.setInputFiles('#file', FIX_V2);
+    await ap.click('#btn-check');
+    await ap.waitForSelector('#report .stats', { timeout: 20000 });
+    const ready = await ap.textContent('#report .stat:first-child .v');
+    ok(ready.trim() === '5', 'ตรวจไฟล์แล้วพร้อมนำเข้า 5 ล็อต', ready);
+    ok(!/ไม่รู้จัก/.test(await ap.textContent('#report')), 'ไม่มีคอลัมน์ที่ระบบไม่รู้จัก');
+
+    await ap.click('#btn-commit');
+    await ap.waitForSelector('#report .note-ok', { timeout: 20000 });
+    ok(/เพิ่มล็อต 5 ล็อต/.test(await ap.textContent('#report .note-ok')), 'นำเข้าแล้วได้ 5 ล็อต');
+
+    // ตรวจว่ายอดและชนิดที่หน้าคลังตรงกับไฟล์
+    await ap.click('#rail-nav [data-page="stock"]');
+    await ap.waitForSelector('#tbody tr');
+    await ap.fill('#q', 'โซเดียมไฮดรอกไซด์');
+    await ap.waitForTimeout(300);
+    ok(await ap.locator('#tbody tr').count() === 1, 'ค้นเจอล็อตที่นำเข้า (ชื่อภาษาไทย)');
+    const row = await ap.textContent('#tbody tr:first-child');
+    ok(/125\.5/.test(row), 'ยอดคงเหลือเท่ากับ Balance ในไฟล์', row.replace(/\s+/g, ' ').slice(0, 120));
+    ok(await ap.locator('#tbody tr:first-child .kind-chem').count() === 1, 'ล็อตที่นำเข้ามีป้ายสารเคมี');
+    await ap.fill('#q', '');
+
+    // นำเข้าไฟล์เดิมซ้ำ — ต้องไม่มีอะไรให้นำเข้า
+    await ap.click('#rail-nav [data-page="import"]');
+    await ap.waitForSelector('#file', { state: 'attached' });
+    await ap.setInputFiles('#file', FIX_V2);
+    await ap.click('#btn-check');
+    await ap.waitForSelector('#report .stats', { timeout: 20000 });
+    ok((await ap.textContent('#report .stat:first-child .v')).trim() === '0', 'นำเข้าไฟล์เดิมซ้ำ: พร้อมนำเข้า 0');
+    ok(await ap.locator('#btn-commit.hidden').count() === 1, 'นำเข้าซ้ำแล้วไม่มีปุ่มบันทึกให้กด');
+    ap.off('dialog', onConfirm);
+    await ap.click('#rail-nav [data-page="stock"]');
+    await ap.waitForSelector('#tbody tr');
+  }
 
   const mob = await openAs(browser, 'staff',
     { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });

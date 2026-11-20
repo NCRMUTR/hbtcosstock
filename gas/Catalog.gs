@@ -91,7 +91,7 @@ function materialFields_(p, cur) {
   var inci  = f.INCIName  !== undefined ? f.INCIName  : (cur ? s_(cur.INCIName)  : '');
   var trade = f.TradeName !== undefined ? f.TradeName : (cur ? s_(cur.TradeName) : '');
   if (kind === 'CHEMICAL') {
-    if (!inci) throw new AppError('กรุณากรอกชื่อสาร (INCI) — ถ้าเป็นเครื่องแก้วหรือวัสดุ ให้เปลี่ยนชนิดของก่อน', 'NO_NAME');
+    if (!inci) throw new AppError('กรุณากรอกชื่อสาร — ถ้าเป็นเครื่องแก้วหรือวัสดุ ให้เปลี่ยนชนิดของก่อน', 'NO_NAME');
   } else if (!inci && !trade) {
     // บีกเกอร์/กระดาษกรองไม่มีชื่อ INCI หรือ CAS แต่ต้องมีชื่ออะไรสักอย่างให้ค้นเจอ
     throw new AppError('กรุณากรอกชื่อรายการ หรือ ชื่อการค้า/รุ่น อย่างน้อย 1 ช่อง', 'NO_NAME');

@@ -3,8 +3,8 @@
 หน้าเว็บอยู่บน GitHub Pages · ข้อมูลอยู่ใน Google Sheet · รูปอยู่ใน Google Drive
 ล็อกอินด้วยบัญชี Google ขององค์กร หรือบัญชีรหัสผ่านที่ผู้ดูแลระบบตั้งให้
 
-> **สถานะ: จุดตั้งต้น** — repo นี้คือการรวมโค้ดจาก HBT Raw Material Stock v2 (รุ่นล่าสุด)
-> กับส่วนที่หยิบมาจาก Lab Stock เข้าด้วยกัน และยังไม่ได้ดัดแปลงให้เป็นระบบของสาขาวิชา
+> **สถานะ: กำลังดัดแปลง** — ต่อยอดจากโค้ด HBT Raw Material Stock v2 (รุ่นล่าสุด) กับส่วนที่หยิบมาจาก Lab Stock
+> ทำแล้ว: ชนิดของ 3 แบบ (สารเคมี / วัสดุสิ้นเปลือง / ครุภัณฑ์) · คำศัพท์หน้าจอของสาขา · นำเข้า CSV จากระบบเดิม — ที่เหลือดู PLAN.md
 > **[MY-STEPS.md](MY-STEPS.md)** — สิ่งที่ *คน* ต้องทำทีละขั้น เริ่มที่ไฟล์นี้
 > **[PLAN.md](PLAN.md)** — งานที่สั่ง *Claude Code* ทำ · **[CLAUDE.md](CLAUDE.md)** — กติกาของโปรเจกต์
 
@@ -13,10 +13,10 @@
 ## เริ่มต้นอย่างไร
 
 ```bash
-npm test            # ทดสอบหลังบ้าน 315 ข้อ บนตัวจำลอง Apps Script (ไม่ต้องติดตั้งอะไร)
+npm test            # ทดสอบหลังบ้าน 538 ข้อ บนตัวจำลอง Apps Script (ไม่ต้องติดตั้งอะไร)
 npm run bundle      # รวม gas/*.gs 13 ไฟล์ → dist/Code.gs สำหรับวางใน Apps Script
 npm run mock        # เปิดเซิร์ฟเวอร์จำลองพร้อมข้อมูลตัวอย่างที่ http://localhost:8799
-npm run e2e         # ทดสอบหน้าเว็บจริงด้วย Chromium 117 ข้อ (ต้องมี playwright)
+npm run e2e         # ทดสอบหน้าเว็บจริงด้วย Chromium 167 ข้อ (ต้องมี playwright)
 ```
 
 เปิดโฟลเดอร์นี้ใน Claude Code แล้วสั่งงานทีละข้อตาม `PLAN.md` ได้เลย
@@ -28,7 +28,7 @@ npm run e2e         # ทดสอบหน้าเว็บจริงด้�
 ```
 docs/              หน้าเว็บ — ES modules ล้วน ไม่มี build step
   index.html       หน้าเดียว สลับหน้าจอด้วย JS
-  config.js        ★ ใส่ GAS_URL และ CLIENT_ID ที่นี่
+  config.js        ★ ใส่ GAS_URL และ CLIENT_ID ที่นี่ (และ APP_NAME ถ้าจะเปลี่ยนชื่อระบบ)
   css/app.css      ทั้งระบบใช้ไฟล์เดียว
   js/              api · auth · ui · search · store · form · detail · dialogs · photo
   js/pages/        map · stock · import · users · settings · account

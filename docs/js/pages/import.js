@@ -16,9 +16,14 @@ export function render(root) {
   root.innerHTML = `
     <div class="view-head">
       <h1>นำเข้าข้อมูลจากระบบเดิม</h1>
-      <p>รับไฟล์ CSV ที่ส่งออกจากระบบเดิมได้โดยตรง — ระบบจะแยกข้อมูลเป็นสาร ล็อต
-         และรายการรับเข้าให้เอง โดยยอดคงเหลือจะเท่ากับ Label W. เดิมทุกรายการ</p>
+      <p>รับไฟล์จากปุ่ม "ดาวน์โหลด CSV" ของระบบเดิม หรือตารางเก่า 16 คอลัมน์ได้โดยตรง —
+         ระบบจะแยกข้อมูลเป็นสาร ล็อต และรายการรับเข้าให้เอง โดยยอดคงเหลือจะเท่ากับยอดในไฟล์
+         (Balance หรือ Label W.) ทุกรายการ</p>
     </div>
+
+    <div class="note note-info" id="imp-kind-note">ของที่นำเข้าจากระบบเดิมจะถูกตั้งเป็นชนิด <b>สารเคมี</b> ทั้งหมด
+      (ระบบเดิมมีแต่สารเคมี) — ถ้ามีวัสดุหรือครุภัณฑ์ปนมา ให้แก้คอลัมน์ ItemKind ในชีต Materials หลังนำเข้า
+      ดูขั้นตอนใน SETUP.md หัวข้อ "ย้ายข้อมูลจากระบบเดิม"</div>
 
     <div class="panel">
       <input id="file" type="file" accept=".csv,text/csv" class="sr">
@@ -174,7 +179,7 @@ async function commit() {
         รายการเคลื่อนไหว ${fmtNum(res.transactions)} รายการ<br>
         ข้ามรายการซ้ำ ${fmtNum(res.skipped)} · ข้ามรายการผิดพลาด ${fmtNum(res.errors)}
       </div>
-      <div class="note note-info">เปิดหน้า <b>คลังวัตถุดิบ</b> เพื่อตรวจสอบข้อมูลที่นำเข้าได้เลย</div>`;
+      <div class="note note-info">เปิดหน้า <b>คลังสารเคมีและวัสดุ</b> เพื่อตรวจสอบข้อมูลที่นำเข้าได้เลย</div>`;
 
     $('#btn-commit').classList.add('hidden');
     $('#btn-check').disabled = true;
@@ -246,7 +251,7 @@ function showReport(p) {
       </div>
 
       ${s.error ? `<div class="note note-risk">
-        มี ${s.error} บรรทัดที่นำเข้าไม่ได้เพราะไม่มี INCI Name — บรรทัดเหล่านี้จะถูกข้าม
+        มี ${s.error} บรรทัดที่นำเข้าไม่ได้เพราะไม่มีชื่อสาร (คอลัมน์ INCI Name) — บรรทัดเหล่านี้จะถูกข้าม
         ส่วนบรรทัดที่เหลือนำเข้าได้ตามปกติ</div>` : ''}
 
       ${p.unmapped && p.unmapped.length ? `<div class="note note-warn">

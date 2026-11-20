@@ -15,13 +15,25 @@ import * as mapPage from './pages/map.js';
 
 const PAGES = {
   map:    { label: 'แผนผัง',        icon: icon.map,    mod: mapPage, role: 'viewer' },
-  stock:  { label: 'คลังวัตถุดิบ',  icon: icon.search, mod: stock,  role: 'viewer' },
+  stock:  { label: 'คลังสารเคมีและวัสดุ', icon: icon.search, mod: stock,  role: 'viewer' },
   import: { label: 'นำเข้าข้อมูล',  icon: icon.upload, mod: imp,    role: 'admin'  },
   users:  { label: 'ผู้ใช้ระบบ',    icon: icon.users,  mod: users,  role: 'admin'  },
   settings: { label: 'ตัวเลือก',   icon: icon.gear,   mod: settings, role: 'staff' }
 };
 
 let current = null;
+
+/* ── ชื่อระบบ ────────────────────────────────────────────────────────────── */
+// ชื่อจริงตกลงกันตอนติดตั้ง จึงอ่านจาก config.js แทนการเขียนตายไว้ใน HTML
+// (HTML มีค่าเดียวกับค่าตั้งต้นไว้แล้ว หน้าจอจึงไม่กะพริบตอนโหลด)
+(function applyBranding() {
+  const cfg = window.APP_CONFIG || {};
+  const name = String(cfg.APP_NAME || 'Lab Chem Stock');
+  const tag  = String(cfg.APP_TAGLINE || 'คลังสารเคมีและวัสดุ');
+  document.title = name;
+  document.querySelectorAll('[data-app-name]').forEach(el => { el.textContent = name; });
+  document.querySelectorAll('[data-app-tagline]').forEach(el => { el.textContent = tag; });
+})();
 
 /* ── เริ่มต้น ────────────────────────────────────────────────────────────── */
 

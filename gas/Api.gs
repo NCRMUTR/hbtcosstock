@@ -131,7 +131,7 @@ function doGet(e) {
   return jsonOut_({
     ok: true,
     data: {
-      service: 'HBT Raw Material Stock API',
+      service: 'Lab Chem Stock API',
       version: 2,
       domain:  ALLOWED_DOMAIN,
       dataVersion: getVersion_(),

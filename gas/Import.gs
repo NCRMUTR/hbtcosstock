@@ -58,8 +58,21 @@ var HEADER_ALIASES = {
   'unitprice': 'unitPrice', 'unit price': 'unitPrice', 'ราคา': 'unitPrice',
   'ราคาต่อหน่วย': 'unitPrice',
   'supplierlotno': 'supplierLotNo', 'lot': 'supplierLotNo', 'lotno': 'supplierLotNo',
-  'เลขล็อต': 'supplierLotNo'
+  'เลขล็อต': 'supplierLotNo',
+  // ไฟล์จากปุ่ม "ดาวน์โหลด CSV" ของ HBT Raw Material Stock v2 (ระบบที่ใช้อยู่ตอนนี้)
+  //   Qty Received = ยอดที่รับเข้าครั้งแรก · Balance = ยอดคงเหลือ ณ วันที่ export
+  //   ความหมายเดียวกับ Total W. / Label W. ของตารางเก่า จึงใช้กลไก RECEIVE + ADJUST เดิมได้เลย
+  'legacy code': 'legacyCode', 'supplier lot': 'supplierLotNo',
+  'qty received': 'totalW', 'qtyreceived': 'totalW',
+  'balance': 'labelW', 'คงเหลือ': 'labelW',
+  'lotid': 'oldLotId', 'lot id': 'oldLotId'
 };
+
+/**
+ * คอลัมน์ที่รู้จักแต่ตั้งใจไม่นำเข้า — ไม่ต้องขึ้นเตือนว่า "ไม่รู้จักคอลัมน์" ให้ผู้ใช้กังวล
+ * Days Left คำนวณใหม่จากวันหมดอายุได้เสมอ เก็บไว้จะกลายเป็นตัวเลขที่ผิดในวันถัดไป
+ */
+var IGNORED_HEADERS = { 'days left': true, 'daysleft': true };
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,6 +185,8 @@ function importCommit_(p, ctx) {
           SDSLink: '', Hazard: '', StorageCondition: '',
           Notes:    'นำเข้าจากระบบเดิม',
           Status:   'ACTIVE',
+          // ระบบเดิมมีแต่สารเคมี — ถ้ามีวัสดุ/ครุภัณฑ์ปนมา ให้แก้ทีละรายการหลังนำเข้า
+          ItemKind: 'CHEMICAL',
           CreatedBy: ctx.email, CreatedAt: new Date(),
           UpdatedBy: '',        UpdatedAt: ''
         });
@@ -215,7 +230,12 @@ function importCommit_(p, ctx) {
         ExpireDate:    it.expireDate  || '',
         ShelfState:    it.shelfState,
         Status:        'ACTIVE',
-        Notes:         'นำเข้าจากระบบเดิม' + (it.recordedBy ? ' (เดิมบันทึกโดย ' + it.recordedBy + ')' : ''),
+        // รหัสล็อตเดิมเก็บไว้ในหมายเหตุ ไม่ใส่ใน LegacyCode เพราะรูปแบบ LOT-ปีงบ-เลข ชนกับรหัสล็อตของระบบนี้ได้
+        // (findLot_ หา LotID ก่อน — พิมพ์รหัสเดิมจะเจอล็อตใหม่ที่บังเอิญเลขตรงกันแทน)
+        // เก็บไว้ให้ตรวจย้อนในชีตได้เท่านั้น ช่องค้นหาบนหน้าเว็บไม่ค้นหมายเหตุ
+        Notes:         'นำเข้าจากระบบเดิม' +
+                       (it.oldLotId   ? ' (รหัสล็อตเดิม ' + it.oldLotId + ')' : '') +
+                       (it.recordedBy ? ' (เดิมบันทึกโดย ' + it.recordedBy + ')' : ''),
         LegacyCode:    it.legacyCode || '',
         CreatedBy:     ctx.email, CreatedAt: now,
         UpdatedBy:     '',        UpdatedAt: '',
@@ -335,7 +355,7 @@ function parseAndNormalize_(p) {
     table[0].forEach(function (h, i) {
       var field = HEADER_ALIASES[normHeader_(h)];
       if (field && mapping[field] === undefined) mapping[field] = i;
-      else if (!field && String(h).trim()) unmapped.push(String(h).trim());
+      else if (!field && String(h).trim() && !IGNORED_HEADERS[normHeader_(h)]) unmapped.push(String(h).trim());
     });
   } else {
     LEGACY_ORDER.forEach(function (field, i) {
@@ -442,6 +462,7 @@ function parseAndNormalize_(p) {
       unit:       get(row, 'unit') || defUnit,
       supplierLotNo: get(row, 'supplierLotNo'),
       recordedBy:    get(row, 'recordedBy'),
+      oldLotId:      get(row, 'oldLotId'),
       shelfStateBy:  get(row, 'shelfStateBy')
     };
 

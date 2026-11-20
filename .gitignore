@@ -6,3 +6,4 @@ tests/shots/
 .env
 # สร้างใหม่ทุกครั้งที่รัน tests/server.js (มี session token ของข้อมูลจำลอง)
 tests/session.json
+HBTCOSSTOCKV2.txt

@@ -119,15 +119,15 @@ export function openItemForm(o) {
           <div class="hint">${chem ? 'สารเคมีต้องมีชื่อสาร ตวงวัดเป็นทศนิยมได้'
             : equip ? 'ครุภัณฑ์นับเป็นชิ้น (pcs) รับเฉพาะจำนวนเต็ม และยังเบิก/คืนไม่ได้ — ใช้ "ย้ายที่เก็บ" แทน'
             : 'วัสดุสิ้นเปลือง เช่น กระดาษกรอง ถุงมือ — ไม่ต้องมีเลข CAS'}</div></div>
-        <div class="field"><label for="f-inci">${chem ? 'ชื่อสาร (INCI) *' : 'ชื่อรายการ'}</label>
+        <div class="field"><label for="f-inci">${chem ? 'ชื่อสาร *' : 'ชื่อรายการ'}</label>
           <input id="f-inci" name="inci" value="${val('inci')}" maxlength="150" ${chem ? 'required' : ''} autofocus
-                 placeholder="${chem ? 'เช่น Sodium Hyaluronate' : equip ? 'เช่น บีกเกอร์ 250 mL' : 'เช่น กระดาษกรอง No.1'}">
+                 placeholder="${chem ? 'เช่น Sodium chloride' : equip ? 'เช่น บีกเกอร์ 250 mL' : 'เช่น กระดาษกรอง No.1'}">
           <div id="sugg" class="sugg"></div></div>
         <div class="row-2">
           <div class="field"><label>${chem ? 'ชื่อการค้า' : 'ชื่อการค้า / รุ่น'}</label>
-            <input name="trade" value="${val('trade')}" maxlength="150" placeholder="${chem ? 'เช่น HA-LMW' : 'เช่น Whatman No.1 / Pyrex'}"></div>
+            <input name="trade" value="${val('trade')}" maxlength="150" placeholder="${chem ? 'เช่น AR grade / Merck' : 'เช่น Whatman No.1 / Pyrex'}"></div>
           ${chem ? `<div class="field"><label>เลข CAS</label>
-            <input name="cas" class="mono" value="${val('cas')}" maxlength="40" placeholder="9067-32-7"></div>` : ''}
+            <input name="cas" class="mono" value="${val('cas')}" maxlength="40" placeholder="7647-14-5"></div>` : ''}
         </div>
         <div class="row-3">
           ${chem ? `<div class="field"><label>หน้าที่ของสาร</label>
@@ -144,7 +144,7 @@ export function openItemForm(o) {
             <input name="storageCondition" value="${val('storageCondition')}" maxlength="60"
                    placeholder="เช่น RT · 2-8C · -20C"></div>
           <div class="field"><label>ความอันตราย (GHS)</label>
-            <input name="hazard" value="${val('hazard')}" maxlength="150" placeholder="เช่น Irritant, Flammable"></div>
+            <input name="hazard" value="${val('hazard')}" maxlength="150" placeholder="เช่น Corrosive, Flammable"></div>
         </div>
         <div class="field"><label>ลิงก์เอกสาร SDS</label>
           <input name="sds" type="url" value="${val('sds')}" maxlength="500" placeholder="https://…"></div>`}

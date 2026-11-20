@@ -141,7 +141,7 @@ export function openLotDetail(lotId, onChanged) {
       <dl class="kv">
         <div><dt>รหัสสาร</dt><dd><span class="mono">${esc(it.materialId)}</span></dd></div>
         <div><dt>ชนิด</dt><dd>${esc(kindLabel(it.kind))}</dd></div>
-        <div><dt>ชื่อ INCI</dt><dd>${esc(it.inci) || '—'}</dd></div>
+        <div><dt>ชื่อสาร / ชื่อรายการ</dt><dd>${esc(it.inci) || '—'}</dd></div>
         <div><dt>ชื่อการค้า</dt><dd>${esc(it.trade) || '—'}</dd></div>
         <div><dt>หน่วยนับ</dt><dd>${esc(it.unit)}</dd></div>
       </dl>
@@ -151,7 +151,7 @@ export function openLotDetail(lotId, onChanged) {
                    title="ดูรูปใหญ่">${photoImg(p, 200, { noRatio: true })}</button>`).join('')}
         <button class="btn btn-ghost btn-sm" data-act="matphotos">${icon.camera}
           รูปของสารนี้ (${photosOf('MATERIAL', it.materialId).length})</button>
-        <span class="muted ph-hint">รูปของสารใช้ร่วมกันทุกล็อต เช่น ฉลากมาตรฐาน หรือหน้า SDS</span>
+        <span class="muted ph-hint">รูปของสารใช้ร่วมกันทุกล็อต เช่น ฉลากข้างขวด หรือหน้า SDS</span>
       </div>`;
   }
 

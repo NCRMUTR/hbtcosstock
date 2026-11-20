@@ -8,11 +8,15 @@
 
 window.APP_CONFIG = {
 
+  /** ชื่อระบบที่แสดงบนแท็บเบราว์เซอร์ หน้าล็อกอิน และแถบเมนู — แก้ได้ตอนติดตั้ง ไม่ต้องแตะโค้ด */
+  APP_NAME: 'Lab Chem Stock',
+  APP_TAGLINE: 'คลังสารเคมีและวัสดุ',
+
   /** Client ID จาก Google Cloud Console → Credentials → OAuth 2.0 Client IDs */
-  CLIENT_ID: 'PASTE-YOUR-CLIENT-ID.apps.googleusercontent.com',
+  CLIENT_ID: '72769441204-43k85fcl2ls4kqcl3fs4d6je3pqiebim.apps.googleusercontent.com',
 
   /** URL ของ Web App ที่ deploy จาก Apps Script (ลงท้ายด้วย /exec) */
-  GAS_URL: 'https://script.google.com/macros/s/PASTE-YOUR-DEPLOYMENT-ID/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbx0DFgHHuO6Zj-dmTshCXsuQxr6EcxsiQnr5kWak0Fzv8LWvZLMZ11h7LeNuiqZ1OtK/exec',
 
   /** โดเมนที่อนุญาต — ใช้แสดงข้อความบนหน้าจอเท่านั้น (ของจริงตรวจที่ GAS) */
   DOMAIN: 'rmutr.ac.th',

@@ -14,7 +14,7 @@
 docs/     หน้าเว็บ (ES modules ล้วน ไม่มีขั้นตอน build ไม่มี framework)
 gas/      โค้ดหลังบ้าน .gs ทั้ง 13 ไฟล์
 dist/     ไฟล์รวมสำหรับวางใน Apps Script (สร้างด้วย npm run bundle — อย่าแก้มือ)
-tests/    ตัวจำลอง Apps Script บน Node + ชุดทดสอบ 364 ข้อ + ทดสอบหน้าเว็บจริง 151 ข้อ
+tests/    ตัวจำลอง Apps Script บน Node + ชุดทดสอบ 538 ข้อ + ทดสอบหน้าเว็บจริง 167 ข้อ
 data/     ไฟล์ต้นทางสำหรับนำเข้า + สเปกการแปลง
 ```
 
@@ -73,8 +73,8 @@ Apps Script ไม่รองรับ CORS preflight ดังนั้น **�
 ## 3. การทดสอบ
 
 ```bash
-npm test                 # หลังบ้าน 364 ข้อ บนตัวจำลอง Apps Script
-npm run e2e              # หน้าเว็บจริงด้วย Chromium 151 ข้อ (ต้องมี playwright)
+npm test                 # หลังบ้าน 538 ข้อ บนตัวจำลอง Apps Script
+npm run e2e              # หน้าเว็บจริงด้วย Chromium 167 ข้อ (ต้องมี playwright)
 npm run bundle           # รวม gas/*.gs → dist/Code.gs
 ```
 

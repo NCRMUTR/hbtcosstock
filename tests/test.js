@@ -197,6 +197,7 @@ bad('import.commit', { csv: CSV, fingerprint: 'ผิด' }, A, null, 'fingerpri
 const cm = good('import.commit', { csv: CSV, fingerprint: pv.fingerprint }, A);
 ok(readTable_('LOTS').length === 3, 'นำเข้าแล้วมี 3 ล็อต');
 ok(readTable_('MATERIALS').length === 2, 'นำเข้าแล้วมีสาร 2 ชนิด');
+ok(readTable_('MATERIALS').every(m => String(m.ItemKind) === 'CHEMICAL'), 'สารที่นำเข้าจากตารางเก่า 16 คอลัมน์เป็น CHEMICAL ทุกตัว');
 {
   // นำเข้าสร้าง RECEIVE ตามน้ำหนักที่รับมา และถ้ายอดคงเหลือปัจจุบันต่างจากนั้น
   // จะเติม ADJUST อีกแถวให้ยอดตรงกับความจริง (แถว 1 และ 3 ของไฟล์ตัวอย่างเป็นแบบนั้น)
@@ -983,6 +984,126 @@ section('เติมชนิดของให้รายการเดิ�
   ok(/รายการเดิม 0 รายการ/.test(msg2), 'รันซ้ำแล้วไม่มีอะไรต้องเติม', msg2);
   eq(JSON.stringify(readTable_('MATERIALS')), tableBefore, 'รันซ้ำแล้วข้อมูลไม่เปลี่ยนแม้แต่ช่องเดียว');
   eq(readTable_('MATERIALS').length, 4, 'รันซ้ำไม่สร้างแถวเพิ่ม และไม่ลบแถวเดิม');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('นำเข้า CSV ที่ดาวน์โหลดจาก HBT Raw Material Stock v2');
+{
+  // ไฟล์รูปแบบเดียวกับปุ่ม "ดาวน์โหลด CSV" ของระบบเดิมทุกไบต์ (BOM · \r\n · เครื่องหมายคำพูด)
+  const fsx = require('fs'), pathx = require('path');
+  const file = fsx.readFileSync(pathx.join(__dirname, 'fixtures', 'hbt-v2-export.csv'), 'utf8');
+  ok(file.charCodeAt(0) === 0xFEFF && /\r\n/.test(file), 'ไฟล์ทดสอบมี BOM และขึ้นบรรทัดแบบ \\r\\n เหมือนไฟล์จริง');
+
+  fresh();
+  const Ai = sessionOf(ADMIN);
+
+  // มีสารชื่อเดียวกันอยู่ก่อนแล้ว และตั้งเป็นวัสดุไว้ — นำเข้าต้องใช้ของเดิม ไม่ไปเปลี่ยนชนิด
+  const pre = good('material.save', { kind: 'CONSUMABLE', inci: 'Sodium Chloride, AR', trade: 'Merck "EMSURE"' }, Ai);
+
+  const pv = good('import.preview', { csv: file }, Ai);
+  eq(pv.mode, 'header', 'รู้ว่าแถวแรกเป็นหัวตาราง');
+  eq(pv.unmapped, [], 'ไม่มีคอลัมน์ที่ระบบไม่รู้จัก (Days Left ถูกข้ามโดยตั้งใจ)');
+  const need = ['oldLotId', 'legacyCode', 'inci', 'trade', 'cas', 'func', 'state', 'supplier', 'supplierLotNo',
+                'room', 'shelf', 'fiscalYear', 'totalW', 'labelW', 'unit', 'receiveDate', 'expireDate', 'shelfState'];
+  const missing = need.filter(f => pv.mapping[f] === undefined);
+  eq(missing, [], 'จับคู่คอลัมน์ได้ครบทุกช่องที่ระบบเดิมส่งออกมา');
+  eq([pv.totalRows, pv.summary.new, pv.summary.error], [5, 5, 0], 'ตรวจไฟล์เจอ 5 ล็อต นำเข้าได้ทั้งหมด');
+  eq(pv.newMaterials, 3, 'สารใหม่ 3 ตัว (Glycerin 2 ล็อต · โซเดียมคลอไรด์มีอยู่แล้ว)');
+  eq(readTable_('LOTS').length, 0, 'ตรวจก่อนนำเข้าไม่เขียนอะไรลงชีต');
+
+  const cm = good('import.commit', { csv: file, fingerprint: pv.fingerprint }, Ai);
+  eq([cm.imported, cm.lots, cm.materials], [5, 5, 3], 'นำเข้า 5 ล็อต สร้างสารใหม่ 3 ตัว');
+
+  const mats = readTable_('MATERIALS');
+  eq(mats.length, 4, 'มีสาร 4 ตัวรวมตัวที่มีอยู่ก่อน');
+  ok(mats.filter(m => m.MaterialID !== pre.materialId).every(m => String(m.ItemKind) === 'CHEMICAL'),
+     'สารที่นำเข้าจากระบบเดิมตั้งเป็น CHEMICAL ทุกตัว',
+     JSON.stringify(mats.map(m => [m.INCIName, m.ItemKind])));
+  eq(String(mats.filter(m => m.MaterialID === pre.materialId)[0].ItemKind), 'CONSUMABLE',
+     'สารที่มีอยู่แล้วไม่ถูกเปลี่ยนชนิดตอนนำเข้า');
+
+  const bal  = computeBalances_();
+  const lotsI = readTable_('LOTS');
+  const byOld = id => lotsI.filter(l => String(l.Notes).indexOf('รหัสล็อตเดิม ' + id + ')') !== -1)[0] || {};
+  ok(['LOT-2569-00001', 'LOT-2569-00002', 'LOT-2568-00042', 'LOT-2568-00051', 'LOT-2569-00007']
+       .every(id => !!byOld(id).LotID), 'ทุกล็อตจดรหัสล็อตเดิมไว้ในหมายเหตุ ตรวจย้อนได้');
+  ok(lotsI.every(l => ['LOT-2569-00001', 'LOT-2569-00002'].indexOf(String(l.LegacyCode)) === -1),
+     'รหัสล็อตเดิมไม่ถูกใส่ใน LegacyCode (กันชนกับรหัสล็อตของระบบนี้)');
+
+  const g1 = byOld('LOT-2569-00001');
+  eq([Number(g1.QtyReceived), bal[g1.LotID]], [1000, 750], 'Qty Received → จำนวนรับเข้า · Balance → ยอดคงเหลือ');
+  eq([String(g1.LegacyCode), String(g1.SupplierLotNo), String(g1.Supplier)], ['#2601/0101', 'SL-2601', 'ABC Chemical'],
+     'Legacy Code / Supplier Lot / Supplier มาครบ');
+  eq([String(g1.Room), String(g1.Shelf), String(g1.FiscalYear)], ['Room 101', 'Shelf A', '2569'], 'ห้อง ชั้น ปีงบ มาครบ');
+  eq([ymd_(g1.ReceiveDate), ymd_(g1.ExpireDate)], ['2026-01-15', '2029-01-15'], 'วันรับเข้าและวันหมดอายุไม่เพี้ยน');
+
+  const nacl = byOld('LOT-2569-00002');
+  eq(String(nacl.MaterialID), pre.materialId, 'ชื่อที่มีจุลภาคและเครื่องหมายคำพูดจับคู่กับสารเดิมได้ถูก');
+  eq(String(nacl.Shelf), 'ตู้เก็บสารไวไฟ › ชั้น 1', 'ชั้นวางแบบเส้นทางของแผนผังมาครบ');
+  eq(String(nacl.ExpireDate), '', 'ไม่มีวันหมดอายุ = เว้นว่าง');
+
+  const eth = byOld('LOT-2568-00042');
+  eq([bal[eth.LotID], String(eth.ShelfState)], [0, 'Eliminate'], 'ล็อตที่หมดแล้วและรอทำลาย นำเข้ามาสถานะเดิม');
+  eq(String((mats.filter(m => m.MaterialID === eth.MaterialID)[0] || {}).Unit), 'mL', 'หน่วย mL มาครบ');
+
+  const naoh = byOld('LOT-2568-00051');
+  eq(String((mats.filter(m => m.MaterialID === naoh.MaterialID)[0] || {}).INCIName), 'โซเดียมไฮดรอกไซด์', 'ชื่อภาษาไทยไม่เพี้ยน');
+  eq(bal[naoh.LotID], 125.5, 'ยอดคงเหลือทศนิยมไม่ถูกปัด');
+
+  eq(byOld('LOT-2569-00007').MaterialID, g1.MaterialID, 'Glycerin 2 ล็อตเป็นสารตัวเดียวกัน');
+
+  const tx = readTable_('TRANSACTIONS');
+  eq([tx.filter(t => t.Type === 'RECEIVE').length, tx.filter(t => t.Type === 'ADJUST').length], [5, 3],
+     'รับเข้า 5 รายการ + ปรับยอด 3 รายการ (เฉพาะล็อตที่คงเหลือไม่เท่าที่รับ)');
+
+  // ผู้ใช้เผลอนำเข้าไฟล์เดิมซ้ำ
+  const pv2 = good('import.preview', { csv: file }, Ai);
+  eq([pv2.summary.new, pv2.summary.duplicate], [0, 5], 'นำเข้าไฟล์เดิมซ้ำ: ตรวจพบว่าซ้ำทั้ง 5 ล็อต');
+  const cm2 = good('import.commit', { csv: file, fingerprint: pv2.fingerprint }, Ai);
+  eq([cm2.imported, readTable_('LOTS').length, readTable_('MATERIALS').length], [0, 5, 4],
+     'นำเข้าซ้ำแล้วไม่เกิดล็อตหรือสารซ้ำ');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('คำศัพท์หน้าจอเป็นของสาขาวิชา ไม่ใช่วัตถุดิบเครื่องสำอาง');
+{
+  const fs = require('fs'), path = require('path');
+  const DOCS = path.join(__dirname, '..', 'docs');
+  const files = [];
+  (function walk(d) {
+    fs.readdirSync(d, { withFileTypes: true }).forEach(e => {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(js|html|css)$/.test(e.name)) files.push(p);
+    });
+  })(DOCS);
+  ok(files.length >= 20, 'พบไฟล์หน้าเว็บครบ', String(files.length));
+
+  // "INCI Name" (มีคำว่า Name) ยังใช้ได้ — เป็นชื่อคอลัมน์ใน CSV ของระบบเดิมที่ต้องนำเข้า/ส่งออกให้ตรง
+  const BANNED = [/วัตถุดิบ/, /เครื่องสำอาง/, /HBT Raw Material/, /ชื่อ INCI/, /\(INCI\)/, /Hyaluronate/, /เตรียมสูตร/];
+  files.forEach(f => {
+    const lines = fs.readFileSync(f, 'utf8').split('\n');
+    BANNED.forEach(re => {
+      const hit = lines.findIndex(l => re.test(l));
+      ok(hit === -1, path.relative(DOCS, f) + ' ไม่มีคำว่า ' + re.source,
+         hit === -1 ? '' : 'บรรทัด ' + (hit + 1) + ': ' + lines[hit].trim().slice(0, 90));
+    });
+  });
+
+  // ชื่อระบบต้องตั้งได้จาก config.js ที่เดียว
+  const cfgText = fs.readFileSync(path.join(DOCS, 'config.js'), 'utf8');
+  ok(/APP_NAME:\s*'[^']+'/.test(cfgText), 'config.js มี APP_NAME ให้ตั้งชื่อระบบตอนติดตั้ง');
+
+  // ข้อความจากหลังบ้านที่ผู้ใช้เห็น ต้องใช้คำใหม่ด้วย
+  fresh();
+  const Aw = sessionOf(ADMIN);
+  const noName = call('material.save', { inci: '' }, Aw);
+  ok(!noName.ok && /ชื่อสาร/.test(noName.error.message) && !/INCI/.test(noName.error.message),
+     'ข้อความเมื่อไม่กรอกชื่อใช้คำว่า "ชื่อสาร"', noName.ok ? '' : noName.error.message);
+  eq(JSON.parse(doGet({ parameter: {} }).getContent()).data.service, 'Lab Chem Stock API', 'ชื่อบริการของหลังบ้านเป็นชื่อใหม่');
+
+  // ห้ามเปลี่ยนชื่อฟิลด์ใน SCHEMA — ชีตจริงอ้างชื่อเหล่านี้
+  ok(SCHEMA.MATERIALS.indexOf('INCIName') === 1, 'ชื่อฟิลด์ INCIName ใน SCHEMA ยังเหมือนเดิม');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

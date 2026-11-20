@@ -48,7 +48,7 @@ export function txnDialog(lotId, type, onDone) {
       <div class="hint">คงเหลือ ${fmtNum(it.balance)} ${unit}</div></div>
     ${who}
     <div class="field"><label>ใช้เพื่อ</label>
-      <input name="purpose" maxlength="200" placeholder="เช่น เตรียมสูตร A / ทดสอบความคงตัว"></div>
+      <input name="purpose" maxlength="200" placeholder="เช่น ปฏิบัติการ HBT2206 / เตรียมสารละลาย"></div>
     <div class="field"><label>เลขที่เอกสารอ้างอิง</label>
       <input name="refDoc" maxlength="60" placeholder="ไม่บังคับ"></div>`;
 

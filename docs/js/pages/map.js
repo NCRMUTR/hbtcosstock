@@ -136,7 +136,7 @@ function drawRoot() {
       ${staff() ? `<button class="btn" data-act="add-root">${icon.plus} เพิ่มห้อง/ที่เก็บ</button>` : ''}
     </div>
     ${noPlace ? `<div class="note note-warn">มีของ ${noPlace} ล็อตที่ยังไม่ได้ผูกกับที่เก็บ —
-      ย้ายเข้าที่เก็บได้จากหน้าคลังวัตถุดิบ หรือให้ผู้ดูแลระบบรัน <code>migratePlaces</code> ใน Apps Script
+      ย้ายเข้าที่เก็บได้จากหน้าคลังสารเคมีและวัสดุ หรือให้ผู้ดูแลระบบรัน <code>migratePlaces</code> ใน Apps Script
       เพื่อย้ายข้อมูล Room/Shelf เดิมเข้ามาทีเดียว</div>` : ''}
     ${roots.length ? `<div class="room-grid">${roots.map(p => {
       const cov = coverOf('PLACE', p.id);

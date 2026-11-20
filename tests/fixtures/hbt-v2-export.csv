@@ -1,0 +1,6 @@
+﻿LotID,Legacy Code,INCI Name,Trade Name,CAS No.,Function,State,Supplier,Supplier Lot,Room,Shelf,Fiscal Year,Qty Received,Balance,Unit,Receive Date,Expire Date,Days Left,Shelf State
+LOT-2569-00001,#2601/0101,Glycerin,Glycerin 99%,56-81-5,Humectant,Liquid,ABC Chemical,SL-2601,Room 101,Shelf A,2569,1000,750,g,2026-01-15,2029-01-15,1152,On Shelf
+LOT-2569-00002,,"Sodium Chloride, AR","Merck ""EMSURE""",7647-14-5,,Solid,Merck Thailand,,ห้องแลป 204,ตู้เก็บสารไวไฟ › ชั้น 1,2569,500,500,g,2026-03-02,,,On Shelf
+LOT-2568-00042,#2512/0042,Ethanol 95%,,64-17-5,Solvent,Liquid,RCI Labscan,,Room 102,Cabinet 1,2568,2500,0,mL,2025-01-10,2027-01-10,416,Eliminate
+LOT-2568-00051,,โซเดียมไฮดรอกไซด์,,1310-73-2,,Solid,ร้านเคมีภัณฑ์,B-77,Room 102,Shelf B,2568,250,125.5,g,2025-06-20,2028-06-20,942,On Shelf
+LOT-2569-00007,#2602/0007,Glycerin,Glycerin 99%,56-81-5,Humectant,Liquid,ABC Chemical,SL-2602,Cold Room,Shelf A,2569,2500,2500,g,2026-02-20,2029-02-20,1188,On Shelf
