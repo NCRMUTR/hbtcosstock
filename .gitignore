@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+tests/shots/
+*.log
+# ห้ามใส่รหัสผ่านหรือคีย์ลงในไฟล์ในโปรเจกต์นี้ — รหัสผ่านแอดมินตั้งผ่าน Script Properties เท่านั้น
+.env
+# สร้างใหม่ทุกครั้งที่รัน tests/server.js (มี session token ของข้อมูลจำลอง)
+tests/session.json

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>HBT Raw Material Stock</title>
+<meta name="description" content="ระบบบริหารจัดการวัตถุดิบ ห้องปฏิบัติการเครื่องสำอาง">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+
+<link rel="icon" href="data:image/svg+xml,
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>
+<rect width='32' height='32' rx='6' fill='%230B5D73'/>
+<path d='M11 7v7.5L7.5 23a2.5 2.5 0 0 0 2.3 3.5h12.4a2.5 2.5 0 0 0 2.3-3.5L21 14.5V7'
+ fill='none' stroke='white' stroke-width='2.2' stroke-linejoin='round'/>
+<path d='M9 7h14' stroke='white' stroke-width='2.2' stroke-linecap='round'/>
+<path d='M9.4 19h13.2' stroke='white' stroke-width='2.2'/></svg>">
+</head>
+<body>
+
+<div id="bar" aria-hidden="true"></div>
+
+<!-- ═══════════════ เข้าสู่ระบบ ═══════════════ -->
+<div id="login-view">
+  <div class="login-card">
+    <div class="login-mark">
+      <b>HBT Raw Material</b>
+      <span>STOCK</span>
+    </div>
+
+    <h1>เข้าสู่ระบบ</h1>
+
+    <div id="google-copy">
+      <p>ใช้บัญชี Google ขององค์กรเพื่อเข้าใช้งาน</p>
+      <div id="gsi-button"></div>
+    </div>
+
+    <div id="pass-copy" class="hidden">
+      <p>สำหรับผู้ที่ผู้ดูแลระบบตั้งชื่อผู้ใช้และรหัสผ่านให้</p>
+    </div>
+
+    <div id="login-error" class="note note-risk hidden"></div>
+
+    <p class="login-note" id="google-note">
+      เข้าได้เฉพาะบัญชีโดเมน <code>@rmutr.ac.th</code> ที่ผู้ดูแลระบบเพิ่มรายชื่อไว้แล้ว
+      หากเข้าไม่ได้ กรุณาติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์
+    </p>
+
+    <div class="login-alt">
+      <button type="button" class="link-btn" id="show-pass-login">เข้าด้วยรหัสผ่าน</button>
+    </div>
+
+    <!-- สำหรับคนที่ไม่มีอีเมลองค์กร — ผู้ดูแลระบบตั้งชื่อผู้ใช้และรหัสผ่านให้ -->
+    <form id="pass-login" class="hidden" autocomplete="on">
+      <div class="field">
+        <label for="li-user">ชื่อผู้ใช้</label>
+        <input id="li-user" name="username" type="text" autocomplete="username"
+               autocapitalize="none" spellcheck="false" required>
+      </div>
+      <div class="field">
+        <label for="li-pass">รหัสผ่าน</label>
+        <input id="li-pass" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn" type="submit" id="li-go">เข้าสู่ระบบ</button>
+      <div class="login-alt">
+        <button type="button" class="link-btn" id="show-google-login">กลับไปเข้าด้วย Google</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════ หน้าหลักของระบบ ═══════════════ -->
+<div id="app-view" class="hidden">
+  <nav class="rail" aria-label="เมนูหลัก">
+    <div class="rail-mark">
+      <b>HBT Raw Material</b>
+      <span>ระบบบริหารวัตถุดิบ</span>
+    </div>
+
+    <div class="rail-nav" id="rail-nav"></div>
+
+    <div class="rail-foot">
+      <div class="who" id="who"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span class="muted" style="font-size:.76rem" id="role-line"></span>
+        <button id="btn-signout" class="link-btn">ออกจากระบบ</button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main" tabindex="-1"></main>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script type="module" src="js/app.js"></script>
+
+<noscript>
+  <div style="padding:40px;font-family:system-ui">
+    ระบบนี้ต้องเปิดใช้งาน JavaScript ในเบราว์เซอร์
+  </div>
+</noscript>
+
+</body>
+</html>

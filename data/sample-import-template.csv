@@ -1,0 +1,4 @@
+﻿kind,name,nameEn,brand,model,cas,grade,category,unit,qty,place,label,receiveDate,expireDate,supplier,fiscalYear,price,notes,reorderPoint,hazard,storage
+สารเคมี,เอทานอล 95%,Ethanol,RCI Labscan,,64-17-5,AR,ตัวทำละลาย,mL,2500,ห้องแลป › ตู้เก็บสารไวไฟ › ชั้น 1,LOT-A123,2026-01-15,2028-01-15,ร้านเคมีภัณฑ์,2569,850,,1000,ไวไฟ,เก็บห่างความร้อน
+วัสดุ,ปลายไปเปตต์ 1000 µL,,Eppendorf,,,,พลาสติก,กล่อง,5,ห้องแลป › ตู้เก็บของใช้ › ชั้น 2,,2026-02-01,,,2569,420,,2,,
+เครื่องมือ,เครื่องชั่งละเอียด 4 ตำแหน่ง,,Mettler Toledo,ME204,,,เครื่องชั่ง,เครื่อง,1,ห้องแลป › โต๊ะชั่ง,SN-12345,2025-06-10,,,2568,68000,,,,

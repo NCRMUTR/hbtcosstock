@@ -1,0 +1,52 @@
+# ตรวจไฟล์ทุกครั้งที่ push (ไม่ได้ใช้ deploy — GitHub Pages เสิร์ฟจาก main /docs โดยตรง)
+name: ตรวจไฟล์
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: ตรวจไวยากรณ์ JavaScript / Apps Script ทุกไฟล์
+        run: |
+          fail=0
+          for f in $(find docs gas -name '*.js' -o -name '*.gs'); do
+            case "$f" in
+              docs/js/*) t="/tmp/chk_$(echo "$f" | tr '/' '_').mjs" ;;   # โมดูล ES
+              *)         t="/tmp/chk_$(echo "$f" | tr '/' '_').js" ;;
+            esac
+            cp "$f" "$t"
+            if ! node --check "$t" 2>/tmp/err; then echo "::error file=$f::$(head -3 /tmp/err)"; fail=1; fi
+          done
+          exit $fail
+
+      - name: ทดสอบหลังบ้าน (ใช้โค้ด .gs จริงบนตัวจำลอง Apps Script)
+        run: node tests/test.js
+
+      - name: ตรวจว่าไฟล์รวมสำหรับวางใน Apps Script ตรงกับไฟล์ต้นทาง
+        run: |
+          node tools/bundle.js
+          git diff --exit-code dist/ || (echo "::error::dist/Code.gs ไม่ตรงกับ gas/ — รัน node tools/bundle.js แล้ว commit" && exit 1)
+
+      - name: ตรวจว่าไฟล์ที่ index.html เรียกใช้มีอยู่จริง
+        run: |
+          fail=0
+          for f in $(grep -oE '(src|href)="[^"]*"' docs/index.html | sed -E 's/.*="([^"]*)"/\1/' | grep -v '^https\?:' | grep -v '^data:' | grep -v '^#'); do
+            [ -f "docs/$f" ] || { echo "::error file=docs/index.html::ไม่พบไฟล์ $f"; fail=1; }
+          done
+          exit $fail
+
+      - name: เตือนถ้ายังไม่ได้ตั้งค่า config.js
+        run: |
+          if grep -q 'PASTE-YOUR' docs/config.js; then
+            echo "::warning file=docs/config.js::ยังไม่ได้ใส่ GAS_URL — หน้าเว็บจะยังเชื่อมต่อไม่ได้ (ดู SETUP.md ขั้นที่ 6)"
+          fi
