@@ -4,7 +4,8 @@
 
 import { api, can } from '../api.js';
 import { loadSnapshot, saveSnapshot } from '../store.js';
-import { buildIndex, search, facet, getItems, coverOf } from '../search.js';
+import { buildIndex, search, facet, getItems, coverOf, getRoots, placeOf, pathOf,
+         placeCounts, NO_PLACE } from '../search.js';
 import { $, $$, esc, toast, withBusy, fmtDate, fmtDays, fmtNum, downloadCsv,
          confirmAction, icon } from '../ui.js';
 import { openLotDetail } from '../detail.js';
@@ -18,7 +19,7 @@ const CFG = window.APP_CONFIG;
 let state = {
   q:       '',
   preset:  'all',
-  filters: { kind: '', room: '', shelf: '', supplier: '', fiscalYear: '', func: '' },
+  filters: blankFilters(),
   sort:    { key: 'name', dir: 'asc' },
   shown:   CFG.PAGE_SIZE,
   rows:    [],
@@ -27,6 +28,11 @@ let state = {
   version: null,
   builtAt: null
 };
+
+/** place = รหัสที่เก็บระดับไหนก็ได้ในแผนผัง (รวมของในที่เก็บย่อยข้างในทั้งหมด) */
+function blankFilters() {
+  return { kind: '', place: '', supplier: '', fiscalYear: '', func: '' };
+}
 
 /* ── โครงหน้า ────────────────────────────────────────────────────────────── */
 
@@ -48,8 +54,7 @@ export function render(root) {
 
     <div class="filters">
       <select id="f-kind"     aria-label="ชนิดของ"></select>
-      <select id="f-room"     aria-label="ห้อง"></select>
-      <select id="f-shelf"    aria-label="ชั้นวาง"></select>
+      <span id="f-place" class="f-place" role="group" aria-label="ที่เก็บตามแผนผัง"></span>
       <select id="f-supplier" aria-label="ผู้จำหน่าย"></select>
       <select id="f-fy"       aria-label="ปีงบประมาณ"></select>
       <select id="f-func"     aria-label="หน้าที่ของสาร"></select>
@@ -127,7 +132,7 @@ function wire() {
     run();
   });
 
-  [['#f-kind', 'kind'], ['#f-room', 'room'], ['#f-shelf', 'shelf'], ['#f-supplier', 'supplier'],
+  [['#f-kind', 'kind'], ['#f-supplier', 'supplier'],
    ['#f-fy', 'fiscalYear'], ['#f-func', 'func']].forEach(([sel, key]) => {
     $(sel).addEventListener('change', e => {
       state.filters[key] = e.target.value;
@@ -136,12 +141,18 @@ function wire() {
     });
   });
 
+  // ที่เก็บไล่ลำดับชั้น: เปลี่ยนระดับไหน → ระดับที่ลึกกว่าถูกล้าง แล้วช่องถัดไปแสดงเฉพาะที่อยู่ข้างใน
+  $('#f-place').addEventListener('change', e => {
+    const sel = e.target.closest('select[data-parent]');
+    if (!sel) return;
+    setPlace(sel.value || sel.dataset.parent);
+  });
+
   $('#f-reset').addEventListener('click', () => {
-    state.filters = { kind: '', room: '', shelf: '', supplier: '', fiscalYear: '', func: '' };
+    state.filters = blankFilters();
     state.preset  = 'all';
     $('#q').value = ''; state.q = '';
     $('#q-clear').classList.add('hidden');
-    fillFilters();
     state.shown = CFG.PAGE_SIZE;
     run();
   });
@@ -186,6 +197,9 @@ function wire() {
 
   // เปิดรายละเอียดล็อต และปุ่มลัดทำรายการ (ผูกที่ตารางครั้งเดียว ใช้ได้กับแถวที่วาดใหม่)
   $('#tbody').addEventListener('click', e => {
+    const loc = e.target.closest('[data-filter-place]');
+    if (loc) { setPlace(loc.dataset.filterPlace); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+
     const open = e.target.closest('[data-open]');
     if (open) return openLotDetail(open.dataset.open, reload);
 
@@ -217,7 +231,6 @@ async function load(force) {
         buildIndex(snap);
         state.version = snap.version;
         state.builtAt = snap.builtAt;
-        fillFilters();
         run();
 
         try {
@@ -236,7 +249,6 @@ async function load(force) {
         state.version = snap.version;
         state.builtAt = snap.builtAt;
         await saveSnapshot(snap);
-        fillFilters();
         run();
         showSync('โหลดข้อมูลใหม่แล้ว');
       }
@@ -256,21 +268,68 @@ function showSync(msg) {
 
 /* ── ตัวกรอง ─────────────────────────────────────────────────────────────── */
 
+function setPlace(placeId) {
+  state.filters.place = placeId || '';
+  state.shown = CFG.PAGE_SIZE;
+  run();
+}
+
+/** ผลค้นหาโดยไม่นับตัวกรองช่องหนึ่ง — ใช้หาว่าช่องนั้นยังมีตัวเลือกไหนที่เลือกแล้วเจอของจริง */
+function rowsWithout(key) {
+  const f = Object.assign({}, state.filters, { [key]: '', preset: 'all' });
+  return search(state.q, f, state.sort).rows;
+}
+
 function fillFilters() {
-  const set = (sel, label, field, chosen) => {
-    const el = $(sel);
-    const opts = facet(field);
-    el.innerHTML = `<option value="">${esc(label)}</option>` +
+  // ตัวเลือกแสดงเฉพาะค่าที่ยังมีของภายใต้ตัวกรองอื่นที่เลือกไว้ เลือกแล้วจึงไม่เจอผลว่างเปล่า
+  // ค่าที่เลือกอยู่แสดงเสมอ แม้ไม่มีของแล้ว ผู้ใช้จะได้เห็นว่ากำลังกรองอะไรอยู่
+  const set = (sel, label, field) => {
+    const chosen = state.filters[field];
+    const opts = facet(field, rowsWithout(field));
+    if (chosen && opts.indexOf(chosen) === -1) opts.unshift(chosen);
+    $(sel).innerHTML = `<option value="">${esc(label)}</option>` +
       opts.map(v => `<option value="${esc(v)}"${v === chosen ? ' selected' : ''}>${esc(v)}</option>`).join('');
   };
   // ชนิดของมีครบ 3 ตัวเลือกเสมอ (ไม่ดึงจากข้อมูล) — คลังที่ยังไม่มีครุภัณฑ์ก็ยังเห็นว่ากรองได้
   $('#f-kind').innerHTML = '<option value="">ทุกชนิด</option>' + KIND_ORDER.map(k =>
     `<option value="${k}"${k === state.filters.kind ? ' selected' : ''}>${esc(KINDS[k].th)}</option>`).join('');
-  set('#f-room',     'ทุกห้อง',         'room',       state.filters.room);
-  set('#f-shelf',    'ทุกชั้นวาง',      'shelf',      state.filters.shelf);
-  set('#f-supplier', 'ทุกผู้จำหน่าย',   'supplier',   state.filters.supplier);
-  set('#f-fy',       'ทุกปีงบประมาณ',   'fiscalYear', state.filters.fiscalYear);
-  set('#f-func',     'ทุกหน้าที่',      'func',       state.filters.func);
+  fillPlace();
+  set('#f-supplier', 'ทุกผู้จำหน่าย',   'supplier');
+  set('#f-fy',       'ทุกปีงบประมาณ',   'fiscalYear');
+  set('#f-func',     'ทุกหน้าที่',      'func');
+}
+
+/**
+ * ช่องเลือกที่เก็บแบบไล่ลำดับชั้นตามแผนผัง: ห้อง › ตู้/โต๊ะ › ชั้น › กล่อง
+ * จำนวนช่องเพิ่ม/ลดตามความลึกของแผนผังเอง — เพิ่มระดับใหม่ในอนาคตก็ใช้ได้ทันที
+ */
+function fillPlace() {
+  const box = $('#f-place');
+  let chosen = state.filters.place;
+  if (chosen && chosen !== NO_PLACE && !placeOf(chosen)) chosen = state.filters.place = '';  // ที่เก็บถูกลบไปแล้ว
+
+  const { byPlace, none } = placeCounts(rowsWithout('place'));
+  const n = id => byPlace.get(id) || 0;
+  const opt = (val, label, count, on) =>
+    `<option value="${esc(val)}"${on ? ' selected' : ''}>${esc(label)} (${fmtNum(count)})</option>`;
+
+  // เส้นทางที่เลือกอยู่ [ห้อง, ตู้, ชั้น, …] — แต่ละระดับคือช่องหนึ่ง และมีช่องถัดไปถ้ายังมีที่เก็บข้างใน
+  const path = chosen && chosen !== NO_PLACE ? pathOf(chosen) : [];
+  let html = `<select data-parent="" data-level="0" aria-label="ห้อง">
+      <option value="">ทุกที่เก็บ</option>
+      ${getRoots().map(id => opt(id, placeOf(id).name, n(id), path[0] && path[0].id === id)).join('')}
+      ${none ? opt(NO_PLACE, 'ยังไม่ระบุที่เก็บ', none, chosen === NO_PLACE) : ''}
+    </select>`;
+
+  path.forEach((p, i) => {
+    if (!p.children.length) return;
+    const next = path[i + 1];
+    html += `<select data-parent="${esc(p.id)}" data-level="${i + 1}" aria-label="ที่เก็บข้างใน ${esc(p.name)}">
+      <option value="">ทั้งหมดใน ${esc(p.name)}</option>
+      ${p.children.map(id => opt(id, placeOf(id).name, n(id), next && next.id === id)).join('')}
+    </select>`;
+  });
+  box.innerHTML = html;
 }
 
 /* ── ค้นหาแล้ววาดผล ──────────────────────────────────────────────────────── */
@@ -288,6 +347,7 @@ function run() {
                 Object.values(state.filters).some(Boolean);
   $('#f-reset').classList.toggle('hidden', !dirty);
 
+  fillFilters();
   renderChips();
   renderHead();
   paint();
@@ -375,7 +435,10 @@ function paint() {
         ${it.stock === 'out' ? '<br><span class="tag tag-risk">หมด</span>'
           : it.stock === 'low' ? '<br><span class="tag tag-warn">ใกล้หมด</span>' : ''}
       </td>
-      <td class="loc">${esc(it.room || '—')}${it.shelf ? '<span class="sep">/</span>' + esc(it.shelf) : ''}</td>
+      <td class="loc">${it.placePath
+        ? `<button class="link-btn loc-btn" data-filter-place="${esc(it.placeId)}"
+             title="กรองเฉพาะของในที่เก็บนี้">${esc(it.placePath)}</button>`
+        : esc(it.room || '—') + (it.shelf ? '<span class="sep">/</span>' + esc(it.shelf) : '')}</td>
       <td>${esc(it.supplier || '—')}</td>
       <td class="num">${esc(it.fiscalYear || '—')}</td>
       <td>

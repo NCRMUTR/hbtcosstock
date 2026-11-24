@@ -137,6 +137,14 @@ export function buildIndex(snap) {
   items    = out;
   settings = snap.settings || {};
   buildPlaces(snap);
+
+  // ชื่อที่เก็บตามแผนผัง (เช่น "ห้องแลป 204 › ตู้ A › ชั้น 2") ต้องค้นได้ด้วย
+  // ข้อความ Room/Shelf บนล็อตเก่าอาจไม่ตรงกับแผนผัง จึงเติมเส้นทางจริงเข้าไปอีกชุด
+  for (const it of items) {
+    const p = it.placeId && places.get(it.placeId);
+    it.placePath = p ? p.pathText : '';
+    if (p) it._hay += ' \u0001 ' + p.pathText.toLowerCase();
+  }
   return items;
 }
 
@@ -229,6 +237,11 @@ export function search(query, f, sort) {
 
   const counts = { all: 0, soon: 0, expired: 0, out: 0, low: 0, eliminate: 0 };
 
+  // ที่เก็บ: เลือกระดับไหนก็ได้ แล้วรวมของในที่เก็บย่อยทุกชั้นข้างใน — อ้างรหัสที่เก็บ ไม่เทียบข้อความ
+  // (เดิมกรองห้อง/ชั้นด้วยข้อความแยกกัน เลือกห้องแล้วเลือกชั้นที่อยู่ห้องอื่นได้ ผลจึงว่างเปล่า)
+  const placeSet = flt.place && flt.place !== NO_PLACE
+    ? new Set([String(flt.place), ...descendantIds(flt.place)]) : null;
+
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
 
@@ -241,11 +254,12 @@ export function search(query, f, sort) {
 
     // ── ตัวกรองจากรายการเลือก ─────────────────────────────────────────────
     if (flt.kind       && it.kind       !== flt.kind)       continue;
-    if (flt.room       && it.room       !== flt.room)       continue;
-    if (flt.shelf      && it.shelf      !== flt.shelf)      continue;
-    if (flt.supplier   && it.supplier   !== flt.supplier)   continue;
-    if (flt.fiscalYear && it.fiscalYear !== flt.fiscalYear) continue;
-    if (flt.func       && it.func       !== flt.func)       continue;
+    if (placeSet && !placeSet.has(it.placeId)) continue;
+    if (flt.place === NO_PLACE && it.placeId && places.has(it.placeId)) continue;
+    // เทียบเป็นข้อความเสมอ — ชีตส่งค่าที่เป็นตัวเลขล้วนมาเป็น number แต่ค่าจากช่องเลือกเป็น string
+    if (flt.supplier   && String(it.supplier)   !== flt.supplier)   continue;
+    if (flt.fiscalYear && String(it.fiscalYear) !== flt.fiscalYear) continue;
+    if (flt.func       && String(it.func)       !== flt.func)       continue;
 
     // นับไว้ทำตัวเลขบนปุ่มตัวกรอง (นับหลังกรองรายการเลือก ก่อนกรอง preset)
     counts.all++;
@@ -314,11 +328,33 @@ function tval(d) { return d ? d.getTime() : 8.64e15; }
 
 /* ── ตัวเลือกสำหรับ dropdown — เอาจากข้อมูลจริงที่มีในคลัง ─────────────── */
 
-export function facet(field) {
+export function facet(field, rows) {
   const seen = new Set();
-  for (const it of items) {
+  for (const it of rows || items) {
     const v = it[field];
-    if (v) seen.add(v);
+    if (v !== '' && v !== null && v !== undefined) seen.add(String(v));
   }
   return [...seen].sort(collator.compare);
+}
+
+/** ค่าพิเศษของตัวกรองที่เก็บ: ของที่ยังไม่ได้ผูกกับแผนผัง */
+export const NO_PLACE = '__none';
+
+/**
+ * นับของในแต่ละที่เก็บ (รวมที่เก็บย่อยข้างใน) จากชุดรายการที่ให้มา
+ * @return {{byPlace: Map<string, number>, none: number}}
+ */
+export function placeCounts(rows) {
+  const byPlace = new Map();
+  let none = 0;
+  for (const it of rows) {
+    let p = it.placeId && places.get(it.placeId);
+    if (!p) { none++; continue; }
+    let guard = 0;
+    while (p && guard++ < 10) {
+      byPlace.set(p.id, (byPlace.get(p.id) || 0) + 1);
+      p = places.get(p.parentId);
+    }
+  }
+  return { byPlace, none };
 }

@@ -248,7 +248,7 @@ const firstBalance = page =>
 
   await page.click('#rail-nav [data-page="stock"]');
   await page.waitForSelector('#tbody tr');
-  ok((await page.locator('#f-room option').count()) > 1, 'ตัวกรองห้องยังทำงานปกติหลังแก้รายการตัวเลือก');
+  ok((await page.locator('#f-place select option').count()) > 1, 'ตัวกรองที่เก็บยังทำงานปกติหลังแก้รายการตัวเลือก');
 
   // ═══════════════════════════════════════════════════════════════════════
   sec('เพิ่มสารใหม่เข้าคลัง');
@@ -701,6 +701,88 @@ const firstBalance = page =>
       return s.lotsIn(id, false).map(it => it.lotId);
     }, dest);
     ok(inDest.includes(lotA) && inDest.includes(lotB), 'ข้อมูลในเครื่องเห็น 2 ล็อตอยู่ในที่เก็บใหม่ (แผนผังตรงกัน)', destPath);
+  }
+
+  sec('ตัวกรองที่เก็บไล่ลำดับชั้นตามแผนผัง (ห้อง › ตู้ › ชั้น)');
+  {
+    await page.fill('#q', '');
+    await page.waitForTimeout(300);
+    if (await page.locator('#f-reset:not(.hidden)').count()) await page.click('#f-reset');
+    await page.waitForTimeout(200);
+    const tree = await page.evaluate(async () => {
+      const s = await import('./js/search.js');
+      const pick = id => { const p = s.placeOf(id); return { id: p.id, name: p.name, children: p.children }; };
+      return s.getRoots().map(pick).map(r => Object.assign(r, { kids: r.children.map(pick) }));
+    });
+    const room = tree.find(r => r.kids.some(k => k.children.length)) || tree[0];
+    ok(await page.locator('#f-place select').count() === 1, 'ยังไม่เลือกห้อง มีช่องที่เก็บช่องเดียว');
+
+    await page.selectOption('#f-place select[data-level="0"]', room.id);
+    await page.waitForSelector('#f-place select[data-level="1"]');
+    const lvl1 = await page.$$eval('#f-place select[data-level="1"] option', os => os.map(o => o.value).filter(Boolean));
+    ok(JSON.stringify(lvl1) === JSON.stringify(room.children),
+       'เลือกห้องแล้ว ช่องถัดไปมีเฉพาะตู้/โต๊ะในห้องนั้น', JSON.stringify(lvl1));
+    const roomRows = await page.locator('#tbody tr').count();
+    ok(roomRows > 0, 'เลือกแค่ห้อง เห็นของทุกชั้นในห้องนั้น', String(roomRows));
+
+    // จุดที่เคยพัง: เลือกห้องก่อน แล้วเลือกชั้น → ต้องมีผล
+    const cab = room.kids.find(k => k.children.length) || room.kids[0];
+    await page.selectOption('#f-place select[data-level="1"]', cab.id);
+    await page.waitForTimeout(250);
+    if (cab.children.length) {
+      await page.waitForSelector('#f-place select[data-level="2"]');
+      const shelfOpts = await page.$$eval('#f-place select[data-level="2"] option',
+        os => os.filter(o => o.value && !/\(0\)/.test(o.textContent)).map(o => o.value));
+      await page.selectOption('#f-place select[data-level="2"]', shelfOpts[0]);
+      await page.waitForTimeout(250);
+      const n = await page.locator('#tbody tr').count();
+      const want = await page.evaluate(async id => {
+        const s = await import('./js/search.js');
+        return s.lotsIn(id, true).length;
+      }, shelfOpts[0]);
+      ok(n === want && n > 0, 'เลือกห้อง แล้วเลือกตู้ แล้วเลือกชั้น ได้ผลตรงกับของในชั้นนั้น', `${n} vs ${want}`);
+      ok(await page.locator('#tbody tr:has-text("ยังไม่ระบุ")').count() === 0, 'ไม่มีของจากที่อื่นปนมา');
+
+      // เปลี่ยนห้อง → ระดับที่ลึกกว่าต้องถูกล้าง
+      await page.selectOption('#f-place select[data-level="1"]', '');
+      await page.waitForTimeout(250);
+      ok(await page.locator('#f-place select[data-level="2"]').count() === 0, 'ล้างระดับตู้แล้ว ช่องชั้นหายไปด้วย');
+      ok(await page.locator('#tbody tr').count() === roomRows, 'กลับไปเห็นของทั้งห้องเหมือนเดิม');
+    }
+
+    // คลิกที่เก็บในตาราง = กรองที่เก็บนั้น
+    await page.click('#f-reset');
+    await page.waitForTimeout(250);
+    const locBtn = page.locator('#tbody .loc-btn').first();
+    const locId = await locBtn.getAttribute('data-filter-place');
+    await locBtn.click();
+    await page.waitForTimeout(300);
+    const deepest = await page.$$eval('#f-place select', ss => ss.map(s => s.value).filter(Boolean).pop());
+    ok(deepest === locId, 'คลิกที่เก็บในตารางแล้วตัวกรองเลือกที่เก็บนั้นให้', `${deepest} ≠ ${locId}`);
+    ok(await page.locator(`#tbody .loc-btn:not([data-filter-place="${locId}"])`).count() === 0,
+       'ตารางเหลือเฉพาะของในที่เก็บนั้น');
+
+    // พิมพ์ชื่อที่เก็บในช่องค้นหาได้
+    await page.click('#f-reset');
+    await page.fill('#q', cab.name);
+    await page.waitForTimeout(300);
+    const byName = await page.locator('#tbody tr').count();
+    const inCab = await page.evaluate(async id => (await import('./js/search.js')).lotsIn(id, true).length, cab.id);
+    ok(byName >= inCab && inCab > 0, 'พิมพ์ชื่อตู้ในช่องค้นหาแล้วเจอของในตู้นั้น', `${byName} / ${inCab}`);
+
+    // ตัวกรองอื่นเหลือเฉพาะค่าที่ยังมีของ
+    await page.click('#f-reset');
+    await page.selectOption('#f-place select[data-level="0"]', room.id);
+    await page.waitForTimeout(250);
+    const supOpts = await page.$$eval('#f-supplier option', os => os.map(o => o.value).filter(Boolean));
+    const supInRoom = await page.evaluate(async id => {
+      const s = await import('./js/search.js');
+      return [...new Set(s.lotsIn(id, true).map(it => String(it.supplier)).filter(Boolean))].sort();
+    }, room.id);
+    ok(JSON.stringify([...supOpts].sort()) === JSON.stringify(supInRoom),
+       'เลือกห้องแล้ว ตัวเลือกผู้จำหน่ายเหลือเฉพาะที่มีของในห้องนั้น', JSON.stringify(supOpts));
+    await page.click('#f-reset');
+    await page.waitForTimeout(250);
   }
 
   sec('สิทธิ์ viewer');
