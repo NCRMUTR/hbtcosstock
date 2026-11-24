@@ -8,7 +8,7 @@ import { buildIndex, search, facet, getItems, coverOf } from '../search.js';
 import { $, $$, esc, toast, withBusy, fmtDate, fmtDays, fmtNum, downloadCsv,
          confirmAction, icon } from '../ui.js';
 import { openLotDetail } from '../detail.js';
-import { txnDialog } from '../dialogs.js';
+import { txnDialog, moveDialog } from '../dialogs.js';
 import { openItemForm } from '../form.js';
 import { photoImg } from '../photo.js';
 import { KIND_ORDER, KINDS, kindTag, kindLabel, canTxn } from '../kinds.js';
@@ -58,7 +58,8 @@ export function render(root) {
 
     <div id="bulk" class="note note-info hidden" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span id="bulk-count"></span>
-      <button class="btn btn-sm" data-shelf-state="On Shelf">คงไว้บนชั้น</button>
+      <button class="btn btn-sm" id="bulk-move">${icon.pin} ย้ายที่เก็บ</button>
+      <button class="btn btn-sm btn-ghost" data-shelf-state="On Shelf">คงไว้บนชั้น</button>
       <button class="btn btn-sm btn-risk" data-shelf-state="Eliminate">ทำลาย/นำออก</button>
       <button id="bulk-clear" class="link-btn">ยกเลิกการเลือก</button>
     </div>
@@ -166,6 +167,12 @@ function wire() {
   $('#bulk').addEventListener('click', e => {
     const b = e.target.closest('[data-shelf-state]');
     if (b) return setShelfState(b.dataset.shelfState);
+    if (e.target.closest('#bulk-move')) return moveDialog([...state.picked], async () => {
+      // ย้ายแล้วล้างที่เลือกไว้ แล้วโหลดใหม่ — หน้าแผนผังใช้ข้อมูลชุดเดียวกันจึงตรงกันทันที
+      state.picked.clear();
+      renderBulk();
+      await load(true);
+    });
     if (e.target.id === 'bulk-clear') {
       state.picked.clear();
       $$('#tbody input[type="checkbox"]').forEach(c => { c.checked = false; });

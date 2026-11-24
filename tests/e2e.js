@@ -613,6 +613,46 @@ const firstBalance = page =>
     await page.waitForSelector('#tbody tr', { timeout: 20000 });
   }
 
+  sec('ติ๊กเลือกหลายรายการในหน้าคลัง แล้วย้ายที่เก็บพร้อมกัน');
+  {
+    await page.fill('#q', '');
+    await page.waitForTimeout(400);
+    const boxes = page.locator('#tbody input[type="checkbox"][data-lot]');
+    const lotA = await boxes.nth(0).getAttribute('data-lot');
+    const lotB = await boxes.nth(1).getAttribute('data-lot');
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    ok(await page.locator('#bulk-move').isVisible(), 'เลือกแล้วมีปุ่ม "ย้ายที่เก็บ" ในแถบด้านบน');
+    await page.click('#bulk-move');
+    await page.waitForSelector('dialog #mv-to');
+    ok(/2 ล็อต/.test(await page.textContent('dialog[open] .modal-head')), 'หน้าต่างย้ายบอกว่าย้าย 2 ล็อต',
+       await page.textContent('dialog[open] .modal-head'));
+    const dest = await page.$eval('dialog #mv-to', s => [...s.options].map(o => o.value).filter(Boolean).pop());
+    await page.selectOption('dialog #mv-to', dest);
+    await page.click('dialog #mv-ok');
+    await page.waitForSelector('dialog[open]', { state: 'detached', timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(800);
+
+    const snap = await apiCall('snapshot', {}, SESS.admin.session);
+    const lf = snap.lots.fields;
+    const placeOfLot = id => (snap.lots.rows.find(r => String(r[lf.indexOf('LotID')]) === id) || [])[lf.indexOf('PlaceID')];
+    ok(placeOfLot(lotA) === dest && placeOfLot(lotB) === dest, 'ทั้ง 2 ล็อตย้ายไปที่เก็บใหม่จริงในหลังบ้าน',
+       `${placeOfLot(lotA)} ${placeOfLot(lotB)} → ${dest}`);
+    ok(await page.locator('#bulk').isHidden(), 'ย้ายเสร็จแล้วล้างรายการที่เลือกไว้');
+    ok(await page.locator('#tbody input[type="checkbox"]:checked').count() === 0, 'ไม่มีช่องที่ยังติ๊กค้าง');
+
+    // หน้าแผนผังต้องเห็นตรงกันทันที (ใช้ snapshot ชุดเดียวกับหน้าคลัง)
+    const destPath = await page.evaluate(async id => {
+      const s = await import('./js/search.js');
+      return s.placeOf(id) ? s.placeOf(id).pathText : '';
+    }, dest);
+    const inDest = await page.evaluate(async id => {
+      const s = await import('./js/search.js');
+      return s.lotsIn(id, false).map(it => it.lotId);
+    }, dest);
+    ok(inDest.includes(lotA) && inDest.includes(lotB), 'ข้อมูลในเครื่องเห็น 2 ล็อตอยู่ในที่เก็บใหม่ (แผนผังตรงกัน)', destPath);
+  }
+
   sec('สิทธิ์ viewer');
   const vp = await openAs(browser, 'viewer');
   ok(await vp.locator('#rail-nav button').count() === 2, 'viewer เห็นเมนู 2 ปุ่ม (แผนผัง + คลัง)',
