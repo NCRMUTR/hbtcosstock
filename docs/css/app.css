@@ -437,6 +437,9 @@ table.data tbody tr.s-elim { box-shadow: inset 3px 0 0 var(--ink-3); opacity: .6
 
 .loc { font-size: .85rem; }
 .loc .sep { color: var(--ink-3); margin: 0 3px; }
+.loc .loc-btn { font-size: inherit; text-align: left; }
+/* ช่องที่เก็บไล่ลำดับชั้น — เรียงต่อกันเหมือนเส้นทาง ห้อง › ตู้ › ชั้น */
+.f-place { display: contents; }
 
 .more-row { text-align: center; padding: 18px 0 0; }
 
