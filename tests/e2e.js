@@ -560,6 +560,59 @@ const firstBalance = page =>
   }
   await closeDialogs(page);
 
+  sec('สลับหน้าไปมาแล้ว กดเปิดครั้งเดียวต้องได้หน้าต่างเดียว (กดกากบาทครั้งเดียวก็ปิด)');
+  {
+    // เดิมหน้าแผนผัง/ตัวเลือกผูกตัวรับคลิกไว้กับ #main ทุกครั้งที่เข้า → ซ้อนกันหลายชุด
+    await closeDialogs(page);
+    for (let i = 0; i < 3; i++) {
+      await page.click('#rail-nav [data-page="map"]');
+      await page.waitForSelector('.room-card, .stage, .crumbs', { timeout: 20000 });
+      await page.click('#rail-nav [data-page="settings"]');
+      await page.waitForSelector('#set-body .set-block', { timeout: 20000 });
+      await page.click('#rail-nav [data-page="stock"]');
+      await page.waitForSelector('#tbody tr', { timeout: 20000 });
+    }
+    await page.fill('#q', '');
+    await page.waitForTimeout(400);
+    await page.click('#tbody tr:first-child .name-btn');
+    await page.waitForSelector('dialog .kv');
+    await page.waitForTimeout(300);
+    ok(await page.locator('dialog[open]').count() === 1, 'หน้าคลัง: กดชื่อรายการครั้งเดียวได้หน้าต่างเดียว',
+       String(await page.locator('dialog[open]').count()));
+    await page.locator('dialog[open] .modal-x').first().click();
+    await page.waitForTimeout(200);
+    ok(await page.locator('dialog[open]').count() === 0, 'กดกากบาทครั้งเดียวก็ปิดหมด',
+       String(await page.locator('dialog[open]').count()));
+
+    await page.click(`${chemRow} >> nth=0 >> [data-tx="ISSUE"]`);
+    await page.waitForTimeout(300);
+    ok(await page.locator('dialog[open]').count() === 1, 'หน้าคลัง: กดปุ่ม "เบิก" ครั้งเดียวได้หน้าต่างเดียว',
+       String(await page.locator('dialog[open]').count()));
+    await closeDialogs(page);
+
+    // บนหน้าแผนผังเองก็ต้องไม่ซ้อน — เปิดห้องแรกแล้วกดรายการแรกที่เห็น
+    await page.click('#rail-nav [data-page="map"]');
+    await page.waitForSelector('.room-card, .stage, .crumbs', { timeout: 20000 });
+    await page.click('#rail-nav [data-page="map"]');
+    await page.waitForSelector('.room-card, .stage, .crumbs', { timeout: 20000 });
+    const roomCard = page.locator('.room-card').first();
+    if (await roomCard.count()) {
+      await roomCard.click();
+      await page.waitForSelector('.crumbs', { timeout: 20000 });
+    }
+    const row = page.locator('#side .u-row').first();
+    if (await row.count()) {
+      await row.click();
+      await page.waitForSelector('dialog .kv');
+      await page.waitForTimeout(300);
+      ok(await page.locator('dialog[open]').count() === 1, 'หน้าแผนผัง: กดรายการครั้งเดียวได้หน้าต่างเดียว',
+         String(await page.locator('dialog[open]').count()));
+    }
+    await closeDialogs(page);
+    await page.click('#rail-nav [data-page="stock"]');
+    await page.waitForSelector('#tbody tr', { timeout: 20000 });
+  }
+
   sec('สิทธิ์ viewer');
   const vp = await openAs(browser, 'viewer');
   ok(await vp.locator('#rail-nav button').count() === 2, 'viewer เห็นเมนู 2 ปุ่ม (แผนผัง + คลัง)',

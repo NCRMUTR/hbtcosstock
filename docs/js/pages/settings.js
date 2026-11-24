@@ -21,8 +21,10 @@ const LISTS = [
 let root = null;
 
 export function render(el) {
-  root = el;
-  el.innerHTML = `
+  // ผูกเหตุการณ์กับกล่องใหม่ของหน้านี้ ไม่ใช่ #main — ไม่งั้นเข้าหน้านี้ซ้ำแล้วตัวรับคลิกซ้อนกัน (ดู map.js)
+  el.innerHTML = '<div class="settings-page"></div>';
+  root = el.firstElementChild;
+  root.innerHTML = `
     <div class="view-head">
       <h1>รายการตัวเลือก</h1>
       <p>ค่าที่ขึ้นในตัวกรองและฟอร์มต่าง ๆ — ลบออกแล้วข้อมูลเดิมที่ใช้ค่านี้ยังอยู่ครบ ไม่ถูกแก้</p>
