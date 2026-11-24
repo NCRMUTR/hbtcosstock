@@ -185,10 +185,9 @@ function materialSave_(p, ctx) {
 
 /** ค่าที่กรอกใหม่ให้โผล่ในรายการตัวเลือกครั้งหน้าด้วย */
 function feedSettingsFromMaterial_(f, actor) {
-  if (f.Function)        addSettingsIfMissing_('Function', [f.Function], actor);
-  if (f.State)           addSettingsIfMissing_('State',    [f.State],    actor);
-  if (f.Unit)            addSettingsIfMissing_('Unit',     [f.Unit],     actor);
-  if (f.DefaultSupplier) addSettingsIfMissing_('Supplier', [f.DefaultSupplier], actor);
+  addSettingsBatch_({
+    Function: [f.Function], State: [f.State], Unit: [f.Unit], Supplier: [f.DefaultSupplier]
+  }, actor);
 }
 
 
@@ -338,7 +337,7 @@ function lotSave_(p, ctx) {
       refDoc:     s_(p.refDoc, 60),
       txnAt:      receive,
       notes:      ''
-    }, ctx.email);
+    }, ctx.email, {});   // ล็อตเพิ่งสร้าง ยอดก่อนรับเข้า = 0 แน่นอน ไม่ต้องอ่านบัญชีทั้งชีตมาคำนวณ
     appendRows_('TRANSACTIONS', [txn]);
 
     // ห้อง/ชั้นที่มาจากแผนผังเป็นเส้นทางเต็ม ไม่ต้องไปเพิ่มเป็นรายการตัวเลือกแบบพิมพ์เอง
@@ -352,8 +351,7 @@ function lotSave_(p, ctx) {
 }
 
 function feedSettingsFromLot_(f, actor) {
-  if (f.Room)       addSettingsIfMissing_('Room',       [f.Room],       actor);
-  if (f.Shelf)      addSettingsIfMissing_('Shelf',      [f.Shelf],      actor);
-  if (f.Supplier)   addSettingsIfMissing_('Supplier',   [f.Supplier],   actor);
-  if (f.FiscalYear) addSettingsIfMissing_('FiscalYear', [f.FiscalYear], actor);
+  addSettingsBatch_({
+    Room: [f.Room], Shelf: [f.Shelf], Supplier: [f.Supplier], FiscalYear: [f.FiscalYear]
+  }, actor);
 }

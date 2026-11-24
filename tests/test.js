@@ -511,6 +511,36 @@ section('รับเข้าล็อตใหม่โดยเลือก�
   eq(String(readTable_('LOTS').filter(l => String(l.LotID) === r.lotId)[0].PlaceID), PL.sh2, 'ที่เก็บยังเป็นที่เดิม');
 }
 
+section('กดบันทึกเร็วขึ้น: ไม่อ่านชีตเดิมซ้ำ');
+{
+  // นับว่าการรับเข้า 1 ครั้งอ่านแต่ละชีตกี่รอบ — บน Apps Script ทุกการอ่านคือเวลาที่ผู้ใช้ต้องรอ
+  const reads = {};
+  const origT = global.readTable_, origR = global.readRaw_;
+  global.readTable_ = k => { reads[k] = (reads[k] || 0) + 1; return origT(k); };
+  global.readRaw_   = k => { reads[k] = (reads[k] || 0) + 1; return origR(k); };
+  let r;
+  try {
+    r = good('lot.save', {
+      material: { inci: 'Isopropyl alcohol', func: 'Solvent ทดสอบ', state: 'Liquid ทดสอบ', unit: 'mL' },
+      qty: 3, placeId: PL.sh1, supplier: 'ผู้ขายใหม่ทดสอบ', fiscalYear: '2571'
+    }, S);
+  } finally {
+    global.readTable_ = origT; global.readRaw_ = origR;
+  }
+  ok((reads.SETTINGS || 0) <= 2, 'รับเข้าสารใหม่อ่านชีตตัวเลือกไม่เกิน 2 รอบ (เดิมสูงสุด 8 รอบ)', JSON.stringify(reads));
+  eq(reads.TRANSACTIONS || 0, 0, 'รับเข้าล็อตใหม่ไม่ต้องอ่านบัญชีเดินสะพัดทั้งชีต');
+
+  // ผลลัพธ์ต้องเหมือนเดิมทุกอย่าง: ยอด ตัวเลือกใหม่ และลำดับ Sort ไม่ชนกัน
+  eq(computeBalances_()[r.lotId], 3, 'ยอดคงเหลือของล็อตใหม่ยังถูกต้อง');
+  const txn = readTable_('TRANSACTIONS').filter(t => String(t.LotID) === r.lotId)[0];
+  eq(Number(txn.BalanceAfter), 3, 'ยอดหลังรายการรับเข้าถูกต้อง');
+  const map = getSettingsMap_();
+  ok(map.Function.includes('Solvent ทดสอบ') && map.State.includes('Liquid ทดสอบ'), 'ค่าใหม่ของสารเข้ารายการตัวเลือก');
+  ok(map.Supplier.includes('ผู้ขายใหม่ทดสอบ') && map.FiscalYear.includes('2571'), 'ค่าใหม่ของล็อตเข้ารายการตัวเลือก');
+  const sorts = readTable_('SETTINGS').filter(x => x.Type === 'Supplier').map(x => Number(x.Sort));
+  eq(new Set(sorts).size, sorts.length, 'ลำดับ Sort ของตัวเลือกไม่ซ้ำกัน');
+}
+
 section('ลบที่เก็บ');
 {
   bad('place.delete', { placeId: PL.room }, S, 'NOT_EMPTY', 'ลบห้องที่ยังมีตู้ข้างในไม่ได้');
