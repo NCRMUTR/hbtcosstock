@@ -30,13 +30,14 @@ if (ghost.length) {
   process.exit(1);
 }
 
+// ไม่ใส่เวลาที่สร้าง และบังคับขึ้นบรรทัดแบบ LF — ผลต้องเหมือนกันทุกไบต์ไม่ว่ารันเมื่อไรบนเครื่องไหน
+// ไม่งั้นขั้น "ไฟล์รวมตรงกับต้นทาง" ใน GitHub Actions จะล้มทุกครั้ง (เคยล้มเพราะเวลาและ CRLF จาก Windows)
 let out = '// Lab Chem Stock — รวมจากไฟล์ใน gas/ (สร้างโดย tools/bundle.js)\n' +
-          '// อย่าแก้ไฟล์นี้โดยตรง — แก้ไฟล์ต้นทางใน gas/ แล้วรันรวมใหม่\n' +
-          '// สร้างเมื่อ ' + new Date().toISOString() + '\n\n';
+          '// อย่าแก้ไฟล์นี้โดยตรง — แก้ไฟล์ต้นทางใน gas/ แล้วรันรวมใหม่\n\n';
 
 for (const f of ORDER) {
   out += '// ═════════════════════ ' + f + ' ═════════════════════\n' +
-         fs.readFileSync(path.join(dir, f), 'utf8').trimEnd() + '\n\n';
+         fs.readFileSync(path.join(dir, f), 'utf8').replace(/\r\n/g, '\n').trimEnd() + '\n\n';
 }
 
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
