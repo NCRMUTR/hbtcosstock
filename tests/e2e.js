@@ -85,6 +85,14 @@ async function photosOfApi(ownerType, ownerId) {
     .sort((a, b) => a.sort - b.sort);
 }
 
+/** เลือกที่เก็บตัวแรกในฟอร์มรับเข้า (ที่เก็บต้องเลือกจากแผนผังเท่านั้น) */
+async function pickPlace(page) {
+  const sel = '#it-form [name=placeId]';
+  const v = await page.$eval(sel, s => [...s.options].map(o => o.value).filter(Boolean)[0]);
+  await page.selectOption(sel, v);
+  return v;
+}
+
 const firstBalance = page =>
   page.$eval('#tbody tr:first-child .qty', el => Number(el.textContent.replace(/,/g, '')));
 
@@ -254,12 +262,26 @@ const firstBalance = page =>
   await page.fill('#it-form [name=func]', 'Soothing');
   await page.fill('#it-form [name=unit]', 'mL');
   await page.fill('#it-form [name=qty]', '1000');
-  await page.fill('#it-form [name=room]', 'Room 101');
-  await page.fill('#it-form [name=shelf]', 'Shelf A');
+  ok(await page.locator('#it-form [name=room], #it-form [name=shelf]').count() === 0,
+     'ฟอร์มรับเข้าไม่มีช่องพิมพ์ห้อง/ชั้นวางเองแล้ว');
+  ok(await page.getAttribute('#it-form [name=placeId]', 'required') !== null, 'ช่องเลือกที่เก็บเป็นช่องบังคับ');
+  ok(/ไปเพิ่มที่หน้าแผนผังก่อน/.test(await page.textContent('#it-form')),
+     'บอกว่าถ้าไม่มีที่เก็บให้ไปเพิ่มที่หน้าแผนผังก่อน');
   await page.fill('#it-form [name=supplier]', 'ABC Chemical');
   await page.fill('#it-form [name=legacyCode]', '#2610/7001');
   await page.click('#it-ok');
+  await page.waitForTimeout(300);
+  ok(await page.locator('#it-form').count() === 1, 'ไม่เลือกที่เก็บแล้วบันทึกไม่ได้');
+  const pickedPlace = await pickPlace(page);
+  await page.click('#it-ok');
   await page.waitForSelector('.toast.is-ok', { timeout: 20000 });
+  {
+    const s = await apiCall('snapshot', {}, SESS.admin.session);
+    const lf = s.lots.fields;
+    const row = s.lots.rows.find(r => r[lf.indexOf('LegacyCode')] === '#2610/7001') || [];
+    ok(row[lf.indexOf('PlaceID')] === pickedPlace, 'ล็อตใหม่ผูกกับที่เก็บที่เลือก (ขึ้นบนแผนผัง)',
+       `${row[lf.indexOf('PlaceID')]} ≠ ${pickedPlace}`);
+  }
   await page.fill('#q', 'panthenol');
   await page.waitForTimeout(400);
   ok(await page.locator('#tbody tr').count() === 1, 'เพิ่มสารใหม่แล้วค้นเจอ 1 รายการ',
@@ -281,12 +303,14 @@ const firstBalance = page =>
   await page.fill('#it-form [name=trade]', 'D-Panthenol 75%');
   await page.fill('#it-form [name=unit]', 'mL');
   await page.fill('#it-form [name=qty]', '500');
+  const dupPlace = await pickPlace(page);
   await page.click('#it-ok');
   await page.waitForSelector('#it-dup', { timeout: 20000 });
   ok(/มีสารชื่อนี้อยู่แล้ว/.test(await page.textContent('#it-err')), 'หลังบ้านปฏิเสธสารซ้ำพร้อมบอกเหตุผล');
   await page.click('#it-dup');
   await page.waitForSelector('.modal-head h2:has-text("รับเข้าล็อตใหม่")', { timeout: 10000 });
   ok(await page.inputValue('#it-form [name=qty]') === '500', 'สลับเป็นโหมดรับเข้าล็อตใหม่โดยยังเก็บจำนวนที่กรอกไว้');
+  ok(await page.inputValue('#it-form [name=placeId]') === dupPlace, 'ที่เก็บที่เลือกไว้ยังอยู่หลังสลับโหมด');
   await page.fill('#it-form [name=legacyCode]', '#2610/7002');
   await page.click('#it-ok');
   await page.waitForSelector('.toast.is-ok', { timeout: 20000 });
@@ -299,16 +323,27 @@ const firstBalance = page =>
   await page.click('#tbody tr:first-child .name-btn');
   await page.waitForSelector('dialog .kv');
   await page.click('dialog [data-act="edit"]');
-  await page.waitForSelector('#it-form [name=room]');
+  await page.waitForSelector('#it-form [name=supplier]');
   ok(await page.locator('#it-form [name=qty]').count() === 0, 'โหมดแก้ไขไม่มีช่องจำนวนที่รับเข้า (ยอดมาจากบัญชี)');
-  await page.fill('#it-form [name=room]', 'Cold Room');
-  await page.fill('#it-form [name=shelf]', 'Shelf B');
+  ok(await page.locator('#it-form [name=placeId], #it-form [name=room]').count() === 0,
+     'โหมดแก้ไขเปลี่ยนที่เก็บในฟอร์มไม่ได้');
+  ok(await page.locator('#it-form [data-move-lot]').count() === 1, 'โหมดแก้ไขมีปุ่ม "ย้ายที่เก็บ" แทน');
+  await page.fill('#it-form [name=supplier]', 'Cold Supplier Co.');
   await page.click('#it-ok');
   await page.waitForSelector('.toast.is-ok', { timeout: 20000 });
   await page.waitForFunction(
-    () => /Cold Room/.test(document.querySelector('dialog .kv')?.textContent || ''),
+    () => /Cold Supplier Co\./.test(document.querySelector('dialog .kv')?.textContent || ''),
     null, { timeout: 15000 });
-  ok(true, 'แก้ที่เก็บของล็อตแล้วรายละเอียดอัปเดตทันที');
+  ok(true, 'แก้ข้อมูลล็อตแล้วรายละเอียดอัปเดตทันที');
+
+  // ปุ่มย้ายที่เก็บในฟอร์มแก้ไข → ปิดฟอร์มแล้วเปิดหน้าต่างย้ายที่เก็บ
+  await page.click('dialog [data-act="edit"]');
+  await page.waitForSelector('#it-form [data-move-lot]');
+  await page.click('#it-form [data-move-lot]');
+  await page.waitForSelector('dialog #mv-to');
+  await page.waitForSelector('#it-form', { state: 'detached', timeout: 5000 }).catch(() => {});
+  ok(await page.locator('#it-form').count() === 0 && await page.locator('dialog #mv-to').count() === 1,
+     'กด "ย้ายที่เก็บ" จากฟอร์มแก้ไขแล้วได้หน้าต่างย้ายที่เก็บ');
   await closeDialogs(page);
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -400,6 +435,7 @@ const firstBalance = page =>
     await page.fill('#it-form [name=qty]', '2.5');
     ok(await page.evaluate(() => !document.querySelector('#it-form').checkValidity()), 'รับเข้า 2.5 ชิ้นแล้วฟอร์มไม่ยอมส่ง');
     await page.fill('#it-form [name=qty]', '5');
+    await pickPlace(page);
     await page.click('#it-ok');
     await page.waitForSelector('.toast.is-ok', { timeout: 20000 });
     await page.selectOption('#f-kind', 'EQUIPMENT');
@@ -419,6 +455,7 @@ const firstBalance = page =>
     await page.selectOption('#it-form [name=kind]', 'CONSUMABLE');
     await page.waitForSelector('#it-form [name=inci]:not([required])');
     await page.fill('#it-form [name=qty]', '10');
+    await pickPlace(page);
     await page.click('#it-ok');
     await page.waitForFunction(() => /อย่างน้อย 1 ช่อง/.test(document.querySelector('#it-err')?.textContent || ''),
                                null, { timeout: 5000 });
@@ -559,6 +596,112 @@ const firstBalance = page =>
        'ล็อตที่ยังไม่ผูกที่เก็บ ไม่มีปุ่มดูบนแผนผัง (ถูกต้อง)');
   }
   await closeDialogs(page);
+
+  sec('สลับหน้าไปมาแล้ว กดเปิดครั้งเดียวต้องได้หน้าต่างเดียว (กดกากบาทครั้งเดียวก็ปิด)');
+  {
+    // เดิมหน้าแผนผัง/ตัวเลือกผูกตัวรับคลิกไว้กับ #main ทุกครั้งที่เข้า → ซ้อนกันหลายชุด
+    await closeDialogs(page);
+    for (let i = 0; i < 3; i++) {
+      await page.click('#rail-nav [data-page="map"]');
+      await page.waitForSelector('.room-card, .stage, .crumbs', { timeout: 20000 });
+      await page.click('#rail-nav [data-page="settings"]');
+      await page.waitForSelector('#set-body .set-block', { timeout: 20000 });
+      await page.click('#rail-nav [data-page="stock"]');
+      await page.waitForSelector('#tbody tr', { timeout: 20000 });
+    }
+    await page.fill('#q', '');
+    await page.waitForTimeout(400);
+    await page.click('#tbody tr:first-child .name-btn');
+    await page.waitForSelector('dialog .kv');
+    await page.waitForTimeout(300);
+    ok(await page.locator('dialog[open]').count() === 1, 'หน้าคลัง: กดชื่อรายการครั้งเดียวได้หน้าต่างเดียว',
+       String(await page.locator('dialog[open]').count()));
+    await page.locator('dialog[open] .modal-x').first().click();
+    await page.waitForTimeout(200);
+    ok(await page.locator('dialog[open]').count() === 0, 'กดกากบาทครั้งเดียวก็ปิดหมด',
+       String(await page.locator('dialog[open]').count()));
+
+    await page.click(`${chemRow} >> nth=0 >> [data-tx="ISSUE"]`);
+    await page.waitForTimeout(300);
+    ok(await page.locator('dialog[open]').count() === 1, 'หน้าคลัง: กดปุ่ม "เบิก" ครั้งเดียวได้หน้าต่างเดียว',
+       String(await page.locator('dialog[open]').count()));
+    await closeDialogs(page);
+
+    // บนหน้าแผนผังเองก็ต้องไม่ซ้อน — เปิดห้องแรกแล้วกดรายการแรกที่เห็น
+    await page.click('#rail-nav [data-page="map"]');
+    await page.waitForSelector('.room-card, .stage, .crumbs', { timeout: 20000 });
+    await page.click('#rail-nav [data-page="map"]');
+    await page.waitForSelector('.room-card, .stage, .crumbs', { timeout: 20000 });
+    const roomCard = page.locator('.room-card').first();
+    if (await roomCard.count()) {
+      await roomCard.click();
+      await page.waitForSelector('.crumbs', { timeout: 20000 });
+    }
+    const row = page.locator('#side .u-row').first();
+    if (await row.count()) {
+      await row.click();
+      await page.waitForSelector('dialog .kv');
+      await page.waitForTimeout(300);
+      ok(await page.locator('dialog[open]').count() === 1, 'หน้าแผนผัง: กดรายการครั้งเดียวได้หน้าต่างเดียว',
+         String(await page.locator('dialog[open]').count()));
+    }
+    await closeDialogs(page);
+
+    // "รับเข้าที่ชั้นนี้" ต้องเลือกที่เก็บนั้นไว้ให้ในฟอร์มเลย
+    const kid = page.locator('#side [data-pick]').first();
+    if (await kid.count()) {
+      const kidId = await kid.getAttribute('data-pick');
+      await kid.click();
+      await page.waitForSelector('[data-act="add-item-child"]');
+      await page.click('[data-act="add-item-child"]');
+      await page.waitForSelector('#it-form [name=placeId]');
+      ok(await page.inputValue('#it-form [name=placeId]') === kidId, 'กด "รับเข้าที่ชั้นนี้" แล้วฟอร์มเลือกที่เก็บนั้นไว้ให้',
+         await page.inputValue('#it-form [name=placeId]') + ' ≠ ' + kidId);
+      await closeDialogs(page);
+    }
+    await page.click('#rail-nav [data-page="stock"]');
+    await page.waitForSelector('#tbody tr', { timeout: 20000 });
+  }
+
+  sec('ติ๊กเลือกหลายรายการในหน้าคลัง แล้วย้ายที่เก็บพร้อมกัน');
+  {
+    await page.fill('#q', '');
+    await page.waitForTimeout(400);
+    const boxes = page.locator('#tbody input[type="checkbox"][data-lot]');
+    const lotA = await boxes.nth(0).getAttribute('data-lot');
+    const lotB = await boxes.nth(1).getAttribute('data-lot');
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    ok(await page.locator('#bulk-move').isVisible(), 'เลือกแล้วมีปุ่ม "ย้ายที่เก็บ" ในแถบด้านบน');
+    await page.click('#bulk-move');
+    await page.waitForSelector('dialog #mv-to');
+    ok(/2 ล็อต/.test(await page.textContent('dialog[open] .modal-head')), 'หน้าต่างย้ายบอกว่าย้าย 2 ล็อต',
+       await page.textContent('dialog[open] .modal-head'));
+    const dest = await page.$eval('dialog #mv-to', s => [...s.options].map(o => o.value).filter(Boolean).pop());
+    await page.selectOption('dialog #mv-to', dest);
+    await page.click('dialog #mv-ok');
+    await page.waitForSelector('dialog[open]', { state: 'detached', timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(800);
+
+    const snap = await apiCall('snapshot', {}, SESS.admin.session);
+    const lf = snap.lots.fields;
+    const placeOfLot = id => (snap.lots.rows.find(r => String(r[lf.indexOf('LotID')]) === id) || [])[lf.indexOf('PlaceID')];
+    ok(placeOfLot(lotA) === dest && placeOfLot(lotB) === dest, 'ทั้ง 2 ล็อตย้ายไปที่เก็บใหม่จริงในหลังบ้าน',
+       `${placeOfLot(lotA)} ${placeOfLot(lotB)} → ${dest}`);
+    ok(await page.locator('#bulk').isHidden(), 'ย้ายเสร็จแล้วล้างรายการที่เลือกไว้');
+    ok(await page.locator('#tbody input[type="checkbox"]:checked').count() === 0, 'ไม่มีช่องที่ยังติ๊กค้าง');
+
+    // หน้าแผนผังต้องเห็นตรงกันทันที (ใช้ snapshot ชุดเดียวกับหน้าคลัง)
+    const destPath = await page.evaluate(async id => {
+      const s = await import('./js/search.js');
+      return s.placeOf(id) ? s.placeOf(id).pathText : '';
+    }, dest);
+    const inDest = await page.evaluate(async id => {
+      const s = await import('./js/search.js');
+      return s.lotsIn(id, false).map(it => it.lotId);
+    }, dest);
+    ok(inDest.includes(lotA) && inDest.includes(lotB), 'ข้อมูลในเครื่องเห็น 2 ล็อตอยู่ในที่เก็บใหม่ (แผนผังตรงกัน)', destPath);
+  }
 
   sec('สิทธิ์ viewer');
   const vp = await openAs(browser, 'viewer');
@@ -758,6 +901,7 @@ const firstBalance = page =>
     await fp.fill('[name=inci]', 'Photo Test Material');
     await fp.fill('[name=unit]', 'g');
     await fp.fill('[name=qty]', '250');
+    await pickPlace(fp);
 
     ok(await fp.locator('[data-pic-add="file"]').count() === 1, 'ฟอร์มรับเข้ามีช่องแนบรูป');
     await choose(fp, () => fp.click('[data-pic-add="file"]'), [FIX_CAB, FIX_ROOM]);

@@ -37,38 +37,56 @@ function settingsAdd_(p, ctx) {
  * @return {string[]} ค่าที่ถูกเพิ่มจริง
  */
 function addSettingsIfMissing_(type, values, actor) {
-  var rows     = readTable_('SETTINGS');
-  var existing = {};
-  var maxSort  = 0;
+  var byType = {};
+  byType[type] = values;
+  return addSettingsBatch_(byType, actor)[type];
+}
 
-  rows.forEach(function (r) {
-    if (String(r.Type).trim() === type) {
-      existing[String(r.Value).trim().toLowerCase()] = true;
-      var s = parseInt(r.Sort, 10) || 0;
-      if (s > maxSort) maxSort = s;
-    }
+/**
+ * เหมือน addSettingsIfMissing_ แต่ทำหลายชนิดในครั้งเดียว: อ่านชีตตัวเลือก 1 ครั้ง เขียน 1 ครั้ง
+ * เดิมการรับเข้า 1 ครั้งเรียกทีละชนิด → อ่านทั้งชีตซ้ำได้ถึง 8 รอบ ซึ่งเป็นส่วนหนึ่งที่ทำให้กดบันทึกช้า
+ * ⚠️ ต้องเรียกอยู่ภายใน withLock_
+ * @param {Object} byType { Type: [values] }
+ * @return {Object} { Type: [ค่าที่ถูกเพิ่มจริง] }
+ */
+function addSettingsBatch_(byType, actor) {
+  var types = Object.keys(byType || {});
+  var out = {};
+  types.forEach(function (t) { out[t] = []; });
+
+  // ไม่มีค่าอะไรให้เพิ่มเลย → ไม่ต้องอ่านชีต
+  var any = types.some(function (t) {
+    return (byType[t] || []).some(function (v) { return String(v || '').trim() !== ''; });
+  });
+  if (!any) return out;
+
+  var existing = {}, maxSort = {};
+  readTable_('SETTINGS').forEach(function (r) {
+    var t = String(r.Type).trim();
+    if (!out.hasOwnProperty(t)) return;
+    existing[t + '\u0001' + String(r.Value).trim().toLowerCase()] = true;
+    var s = parseInt(r.Sort, 10) || 0;
+    if (s > (maxSort[t] || 0)) maxSort[t] = s;
   });
 
-  var toAdd = [];
-  var seen  = {};
-  values.forEach(function (v) {
-    var value = String(v || '').trim();
-    if (!value) return;
-    var key = value.toLowerCase();
-    if (existing[key] || seen[key]) return;
-    seen[key] = true;
-    toAdd.push(value);
-  });
-
-  if (toAdd.length) {
-    appendRows_('SETTINGS', toAdd.map(function (v, i) {
-      return {
-        Type: type, Value: v, Sort: maxSort + i + 1, Active: true,
+  var rows = [];
+  types.forEach(function (t) {
+    (byType[t] || []).forEach(function (v) {
+      var value = String(v || '').trim();
+      if (!value) return;
+      var key = t + '\u0001' + value.toLowerCase();
+      if (existing[key]) return;
+      existing[key] = true;
+      out[t].push(value);
+      rows.push({
+        Type: t, Value: value, Sort: (maxSort[t] || 0) + out[t].length, Active: true,
         CreatedBy: actor || 'SYSTEM', CreatedAt: new Date()
-      };
-    }));
-  }
-  return toAdd;
+      });
+    });
+  });
+
+  if (rows.length) appendRows_('SETTINGS', rows);
+  return out;
 }
 
 

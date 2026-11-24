@@ -1,6 +1,5 @@
 // Lab Chem Stock — รวมจากไฟล์ใน gas/ (สร้างโดย tools/bundle.js)
 // อย่าแก้ไฟล์นี้โดยตรง — แก้ไฟล์ต้นทางใน gas/ แล้วรันรวมใหม่
-// สร้างเมื่อ 2026-11-20T03:58:06.835Z
 
 // ═════════════════════ Config.gs ═════════════════════
 /**
@@ -1642,38 +1641,56 @@ function settingsAdd_(p, ctx) {
  * @return {string[]} ค่าที่ถูกเพิ่มจริง
  */
 function addSettingsIfMissing_(type, values, actor) {
-  var rows     = readTable_('SETTINGS');
-  var existing = {};
-  var maxSort  = 0;
+  var byType = {};
+  byType[type] = values;
+  return addSettingsBatch_(byType, actor)[type];
+}
 
-  rows.forEach(function (r) {
-    if (String(r.Type).trim() === type) {
-      existing[String(r.Value).trim().toLowerCase()] = true;
-      var s = parseInt(r.Sort, 10) || 0;
-      if (s > maxSort) maxSort = s;
-    }
+/**
+ * เหมือน addSettingsIfMissing_ แต่ทำหลายชนิดในครั้งเดียว: อ่านชีตตัวเลือก 1 ครั้ง เขียน 1 ครั้ง
+ * เดิมการรับเข้า 1 ครั้งเรียกทีละชนิด → อ่านทั้งชีตซ้ำได้ถึง 8 รอบ ซึ่งเป็นส่วนหนึ่งที่ทำให้กดบันทึกช้า
+ * ⚠️ ต้องเรียกอยู่ภายใน withLock_
+ * @param {Object} byType { Type: [values] }
+ * @return {Object} { Type: [ค่าที่ถูกเพิ่มจริง] }
+ */
+function addSettingsBatch_(byType, actor) {
+  var types = Object.keys(byType || {});
+  var out = {};
+  types.forEach(function (t) { out[t] = []; });
+
+  // ไม่มีค่าอะไรให้เพิ่มเลย → ไม่ต้องอ่านชีต
+  var any = types.some(function (t) {
+    return (byType[t] || []).some(function (v) { return String(v || '').trim() !== ''; });
+  });
+  if (!any) return out;
+
+  var existing = {}, maxSort = {};
+  readTable_('SETTINGS').forEach(function (r) {
+    var t = String(r.Type).trim();
+    if (!out.hasOwnProperty(t)) return;
+    existing[t + '\u0001' + String(r.Value).trim().toLowerCase()] = true;
+    var s = parseInt(r.Sort, 10) || 0;
+    if (s > (maxSort[t] || 0)) maxSort[t] = s;
   });
 
-  var toAdd = [];
-  var seen  = {};
-  values.forEach(function (v) {
-    var value = String(v || '').trim();
-    if (!value) return;
-    var key = value.toLowerCase();
-    if (existing[key] || seen[key]) return;
-    seen[key] = true;
-    toAdd.push(value);
-  });
-
-  if (toAdd.length) {
-    appendRows_('SETTINGS', toAdd.map(function (v, i) {
-      return {
-        Type: type, Value: v, Sort: maxSort + i + 1, Active: true,
+  var rows = [];
+  types.forEach(function (t) {
+    (byType[t] || []).forEach(function (v) {
+      var value = String(v || '').trim();
+      if (!value) return;
+      var key = t + '\u0001' + value.toLowerCase();
+      if (existing[key]) return;
+      existing[key] = true;
+      out[t].push(value);
+      rows.push({
+        Type: t, Value: value, Sort: (maxSort[t] || 0) + out[t].length, Active: true,
         CreatedBy: actor || 'SYSTEM', CreatedAt: new Date()
-      };
-    }));
-  }
-  return toAdd;
+      });
+    });
+  });
+
+  if (rows.length) appendRows_('SETTINGS', rows);
+  return out;
 }
 
 
@@ -2087,10 +2104,9 @@ function materialSave_(p, ctx) {
 
 /** ค่าที่กรอกใหม่ให้โผล่ในรายการตัวเลือกครั้งหน้าด้วย */
 function feedSettingsFromMaterial_(f, actor) {
-  if (f.Function)        addSettingsIfMissing_('Function', [f.Function], actor);
-  if (f.State)           addSettingsIfMissing_('State',    [f.State],    actor);
-  if (f.Unit)            addSettingsIfMissing_('Unit',     [f.Unit],     actor);
-  if (f.DefaultSupplier) addSettingsIfMissing_('Supplier', [f.DefaultSupplier], actor);
+  addSettingsBatch_({
+    Function: [f.Function], State: [f.State], Unit: [f.Unit], Supplier: [f.DefaultSupplier]
+  }, actor);
 }
 
 
@@ -2141,6 +2157,11 @@ function lotSave_(p, ctx) {
 
   // สร้างสารใหม่พร้อมกันในคำสั่งเดียว (ทำนอก lock ของล็อต เพราะ materialSave_ ถือ lock เอง)
   var materialId = s_(p.materialId, 20);
+  // ตรวจที่เก็บก่อนสร้างสาร — ถ้าไปเจอทีหลังใน lock สารใหม่จะถูกสร้างค้างไว้โดยไม่มีล็อต
+  if (!lotId && p.placeId && !activePlaces_().some(function (x) { return String(x.PlaceID) === s_(p.placeId, 20); })) {
+    throw new AppError('ไม่พบที่เก็บที่เลือก (อาจถูกลบไปแล้ว) — กดซิงก์ข้อมูลแล้วเลือกใหม่ ' +
+                       'หรือเพิ่มที่เก็บที่หน้าแผนผังก่อน', 'NO_PLACE');
+  }
   if (!lotId && !materialId && p.material) {
     materialId = materialSave_(p.material, ctx).materialId;
   }
@@ -2157,6 +2178,13 @@ function lotSave_(p, ctx) {
         throw new AppError(
           'แก้จำนวนที่รับเข้าของล็อตที่บันทึกแล้วไม่ได้ — ยอดคงเหลือมาจากบัญชีเดินสะพัด\n' +
           'ถ้ายอดจริงไม่ตรง ให้ใช้ "ปรับยอด" แทน', 'QTY_LOCKED');
+      }
+
+      // ย้ายที่ผ่านการแก้ไขจะไม่มีรายการ MOVE ในประวัติ — บังคับให้ไปทางย้ายที่เก็บแทน
+      if (p.placeId !== undefined) {
+        throw new AppError(
+          'เปลี่ยนที่เก็บของล็อตเดิมผ่านการแก้ไขข้อมูลไม่ได้ — ให้ใช้ปุ่ม "ย้ายที่เก็บ" ' +
+          'เพื่อให้การย้ายถูกบันทึกในประวัติ', 'USE_MOVE');
       }
 
       var patch = lotFields_(p);
@@ -2182,6 +2210,24 @@ function lotSave_(p, ctx) {
 
     var f = lotFields_(p);
     assertLegacyCodeFree_(lots, f.LegacyCode, null);
+
+    // เลือกที่เก็บจากแผนผัง → ข้อความห้อง/ชั้นมาจากที่เก็บนั้นเสมอ ไม่ใช่ที่พิมพ์มา
+    // ของที่รับเข้าจึงขึ้นบนแผนผังทันที และชื่อห้อง/ชั้นตรงกับแผนผังทุกตัวอักษร
+    var placeId = s_(p.placeId, 20);
+    var fromPlace = false;
+    if (placeId) {
+      var places = activePlaces_();
+      var dest = places.filter(function (x) { return String(x.PlaceID) === placeId; })[0];
+      if (!dest) {
+        throw new AppError('ไม่พบที่เก็บที่เลือก (อาจถูกลบไปแล้ว) — กดซิงก์ข้อมูลแล้วเลือกใหม่ ' +
+                           'หรือเพิ่มที่เก็บที่หน้าแผนผังก่อน', 'NO_PLACE');
+      }
+      var text = placeTextFor_(places, placeId);
+      f.PlaceID = placeId;
+      f.Room    = text.Room;
+      f.Shelf   = text.Shelf;
+      fromPlace = true;
+    }
 
     var now = new Date();
     var receive = f.ReceiveDate || now;
@@ -2210,21 +2256,23 @@ function lotSave_(p, ctx) {
       refDoc:     s_(p.refDoc, 60),
       txnAt:      receive,
       notes:      ''
-    }, ctx.email);
+    }, ctx.email, {});   // ล็อตเพิ่งสร้าง ยอดก่อนรับเข้า = 0 แน่นอน ไม่ต้องอ่านบัญชีทั้งชีตมาคำนวณ
     appendRows_('TRANSACTIONS', [txn]);
 
-    feedSettingsFromLot_(f, ctx.email);
-    audit_(ctx.email, 'LOT_ADD', 'Lots', f.LotID, { material: materialId, qty: qty });
+    // ห้อง/ชั้นที่มาจากแผนผังเป็นเส้นทางเต็ม ไม่ต้องไปเพิ่มเป็นรายการตัวเลือกแบบพิมพ์เอง
+    feedSettingsFromLot_(fromPlace
+      ? { Supplier: f.Supplier, FiscalYear: f.FiscalYear } : f, ctx.email);
+    audit_(ctx.email, 'LOT_ADD', 'Lots', f.LotID,
+           fromPlace ? { material: materialId, qty: qty, place: placeId } : { material: materialId, qty: qty });
 
     return { lotId: f.LotID, materialId: materialId, txnId: txn.TxnID, created: true };
   });
 }
 
 function feedSettingsFromLot_(f, actor) {
-  if (f.Room)       addSettingsIfMissing_('Room',       [f.Room],       actor);
-  if (f.Shelf)      addSettingsIfMissing_('Shelf',      [f.Shelf],      actor);
-  if (f.Supplier)   addSettingsIfMissing_('Supplier',   [f.Supplier],   actor);
-  if (f.FiscalYear) addSettingsIfMissing_('FiscalYear', [f.FiscalYear], actor);
+  addSettingsBatch_({
+    Room: [f.Room], Shelf: [f.Shelf], Supplier: [f.Supplier], FiscalYear: [f.FiscalYear]
+  }, actor);
 }
 
 // ═════════════════════ Places.gs ═════════════════════

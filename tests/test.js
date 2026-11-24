@@ -483,6 +483,64 @@ section('ย้ายล็อตเข้าที่เก็บ (MOVE)');
      'เปลี่ยนชื่อตู้แล้วข้อความบนล็อตที่อยู่ข้างในตามไปด้วย');
 }
 
+section('รับเข้าล็อตใหม่โดยเลือกที่เก็บจากแผนผัง');
+{
+  const mat = String(readTable_('MATERIALS')[0].MaterialID);
+  const settingsBefore = getSettingsMap_().Shelf.length;
+
+  // ข้อความห้อง/ชั้นที่พิมพ์มาต้องถูกแทนด้วยเส้นทางของที่เก็บจริง
+  const r = good('lot.save', { materialId: mat, qty: 7, placeId: PL.sh2, room: 'พิมพ์มั่ว', shelf: 'ไม่ตรงแผนผัง' }, S);
+  const lot = readTable_('LOTS').filter(l => String(l.LotID) === r.lotId)[0];
+  eq(String(lot.PlaceID), PL.sh2, 'ล็อตใหม่ผูกกับที่เก็บที่เลือกทันที (ขึ้นบนแผนผัง)');
+  eq(String(lot.Room), 'ห้องแลป 204', 'ห้องมาจากแผนผัง ไม่ใช่ข้อความที่พิมพ์มา');
+  eq(String(lot.Shelf), 'ตู้ไวไฟ A › ชั้น 2', 'ชั้นมาจากเส้นทางในแผนผัง');
+  eq(getSettingsMap_().Shelf.length, settingsBefore, 'เส้นทางจากแผนผังไม่ถูกเพิ่มเป็นตัวเลือกชั้นวางแบบพิมพ์เอง');
+  eq(computeBalances_()[r.lotId], 7, 'ยอดคงเหลือของล็อตที่เลือกที่เก็บถูกต้อง');
+
+  // ที่เก็บที่ไม่มีจริง → ไม่สร้างทั้งล็อตและสารค้างไว้
+  const matsBefore = readTable_('MATERIALS').length;
+  const lotsBefore = readTable_('LOTS').length;
+  bad('lot.save', { materialId: mat, qty: 1, placeId: 'PL-99999' }, S, 'NO_PLACE', 'ที่เก็บที่ไม่มีจริงรับเข้าไม่ได้');
+  bad('lot.save', { material: { inci: 'สารที่ไม่ควรถูกสร้าง', unit: 'g' }, qty: 1, placeId: 'PL-99999' }, S,
+      'NO_PLACE', 'สร้างสารใหม่พร้อมที่เก็บที่ไม่มีจริงไม่ได้');
+  eq(readTable_('MATERIALS').length, matsBefore, 'ไม่มีสารกำพร้าถูกสร้างค้างไว้');
+  eq(readTable_('LOTS').length, lotsBefore, 'ไม่มีล็อตถูกสร้าง');
+
+  // แก้ไขล็อตเดิมเปลี่ยนที่เก็บไม่ได้ — ต้องผ่าน "ย้ายที่เก็บ" เพื่อให้มีประวัติ
+  bad('lot.save', { lotId: r.lotId, placeId: PL.sh1 }, S, 'USE_MOVE', 'แก้ไขล็อตแล้วแอบย้ายที่เก็บไม่ได้');
+  eq(String(readTable_('LOTS').filter(l => String(l.LotID) === r.lotId)[0].PlaceID), PL.sh2, 'ที่เก็บยังเป็นที่เดิม');
+}
+
+section('กดบันทึกเร็วขึ้น: ไม่อ่านชีตเดิมซ้ำ');
+{
+  // นับว่าการรับเข้า 1 ครั้งอ่านแต่ละชีตกี่รอบ — บน Apps Script ทุกการอ่านคือเวลาที่ผู้ใช้ต้องรอ
+  const reads = {};
+  const origT = global.readTable_, origR = global.readRaw_;
+  global.readTable_ = k => { reads[k] = (reads[k] || 0) + 1; return origT(k); };
+  global.readRaw_   = k => { reads[k] = (reads[k] || 0) + 1; return origR(k); };
+  let r;
+  try {
+    r = good('lot.save', {
+      material: { inci: 'Isopropyl alcohol', func: 'Solvent ทดสอบ', state: 'Liquid ทดสอบ', unit: 'mL' },
+      qty: 3, placeId: PL.sh1, supplier: 'ผู้ขายใหม่ทดสอบ', fiscalYear: '2571'
+    }, S);
+  } finally {
+    global.readTable_ = origT; global.readRaw_ = origR;
+  }
+  ok((reads.SETTINGS || 0) <= 2, 'รับเข้าสารใหม่อ่านชีตตัวเลือกไม่เกิน 2 รอบ (เดิมสูงสุด 8 รอบ)', JSON.stringify(reads));
+  eq(reads.TRANSACTIONS || 0, 0, 'รับเข้าล็อตใหม่ไม่ต้องอ่านบัญชีเดินสะพัดทั้งชีต');
+
+  // ผลลัพธ์ต้องเหมือนเดิมทุกอย่าง: ยอด ตัวเลือกใหม่ และลำดับ Sort ไม่ชนกัน
+  eq(computeBalances_()[r.lotId], 3, 'ยอดคงเหลือของล็อตใหม่ยังถูกต้อง');
+  const txn = readTable_('TRANSACTIONS').filter(t => String(t.LotID) === r.lotId)[0];
+  eq(Number(txn.BalanceAfter), 3, 'ยอดหลังรายการรับเข้าถูกต้อง');
+  const map = getSettingsMap_();
+  ok(map.Function.includes('Solvent ทดสอบ') && map.State.includes('Liquid ทดสอบ'), 'ค่าใหม่ของสารเข้ารายการตัวเลือก');
+  ok(map.Supplier.includes('ผู้ขายใหม่ทดสอบ') && map.FiscalYear.includes('2571'), 'ค่าใหม่ของล็อตเข้ารายการตัวเลือก');
+  const sorts = readTable_('SETTINGS').filter(x => x.Type === 'Supplier').map(x => Number(x.Sort));
+  eq(new Set(sorts).size, sorts.length, 'ลำดับ Sort ของตัวเลือกไม่ซ้ำกัน');
+}
+
 section('ลบที่เก็บ');
 {
   bad('place.delete', { placeId: PL.room }, S, 'NOT_EMPTY', 'ลบห้องที่ยังมีตู้ข้างในไม่ได้');
