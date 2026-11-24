@@ -7,7 +7,8 @@
      edit แก้ไขข้อมูลล็อต (จำนวนที่รับเข้าแก้ไม่ได้ — ยอดมาจากบัญชีเดินสะพัด)
    ══════════════════════════════════════════════════════════════════════════ */
 import { api } from './api.js';
-import { getItems, getSettings } from './search.js';
+import { getItems, getSettings, getRoots, placeOf } from './search.js';
+import { placeOptions, moveDialog } from './dialogs.js';
 import {
   $, $$, esc, toast, run, openModal, readForm, optionsHtml, datalistHtml, todayYmd, fmtNum, icon
 } from './ui.js';
@@ -46,7 +47,7 @@ export function openItemForm(o) {
     mode: o.mode || 'new',
     materialId: o.materialId || '',
     lotId: o.lotId || '',
-    v: { receiveDate: todayYmd(), kind: o.kind || 'CHEMICAL' },
+    v: { receiveDate: todayYmd(), kind: o.kind || 'CHEMICAL', placeId: o.placeId || '' },
     pics: []      // รูปที่เลือกไว้ตอนกรอกฟอร์ม — อัปหลังสร้างล็อตสำเร็จเท่านั้น
   };
   let picSeq = 0;
@@ -59,7 +60,7 @@ export function openItemForm(o) {
     st.materialId = it.materialId;
     st.v = {
       supplier: it.supplier, supplierLotNo: it.supplierLotNo, fiscalYear: it.fiscalYear,
-      room: it.room, shelf: it.shelf, legacyCode: it.legacyCode,
+      legacyCode: it.legacyCode,
       unitPrice: it.unitPrice === null ? '' : it.unitPrice,
       receiveDate: ymd(it.receiveDate), expireDate: ymd(it.expireDate),
       notes: ''
@@ -157,10 +158,7 @@ export function openItemForm(o) {
           <div class="field"><label>จำนวนที่รับเข้า (${esc(unitNow)}) *</label>
             <input name="qty" type="number" ${qtyAttrs({ kind })} min="0" value="${val('qty')}" required
                    ${st.mode === 'lot' ? 'autofocus' : ''}></div>`}
-          <div class="field"><label>ห้อง</label>
-            <input name="room" value="${val('room')}" maxlength="80" list="dl-room"></div>
-          <div class="field"><label>ชั้นวาง</label>
-            <input name="shelf" value="${val('shelf')}" maxlength="80" list="dl-shelf"></div>
+          ${placeFieldHtml()}
         </div>
         <div class="row-3">
           <div class="field"><label>ผู้จำหน่าย</label>
@@ -192,10 +190,35 @@ export function openItemForm(o) {
       ${datalistHtml('dl-func',  opts('Function'))}
       ${datalistHtml('dl-state', opts('State'))}
       ${datalistHtml('dl-unit',  opts('Unit'))}
-      ${datalistHtml('dl-room',  opts('Room'))}
-      ${datalistHtml('dl-shelf', opts('Shelf'))}
       ${datalistHtml('dl-sup',   opts('Supplier'))}
       ${datalistHtml('dl-fy',    opts('FiscalYear'))}`;
+  }
+
+  /* ── ที่เก็บ: เลือกจากแผนผังเท่านั้น ─────────────────────────────────── */
+  // เดิมพิมพ์ห้อง/ชั้นเองได้ ของที่รับเข้าจึงไม่ผูกกับแผนผังและไม่ขึ้นบนหน้าแผนผัง
+  function placeFieldHtml() {
+    const span = 'style="grid-column:span 2"';
+    const goMap = `<button type="button" class="link-btn" data-go-map>${icon.map} ไปหน้าแผนผัง</button>`;
+
+    if (st.mode === 'edit') {
+      const p = st.it.placeId && placeOf(st.it.placeId);
+      const now = p ? p.pathText : ([st.it.room, st.it.shelf].filter(Boolean).join(' / ') || 'ยังไม่ระบุที่เก็บ');
+      return `<div class="field" ${span}><label>ที่เก็บ</label>
+        <div class="lotline"><b>${esc(now)}</b>
+          <button type="button" class="btn btn-ghost btn-sm" data-move-lot>${icon.pin} ย้ายที่เก็บ</button></div>
+        <div class="hint">เปลี่ยนที่เก็บให้ใช้ปุ่ม "ย้ายที่เก็บ" — การย้ายจะถูกบันทึกในประวัติ</div></div>`;
+    }
+
+    if (!getRoots().length) {
+      return `<div class="field" ${span}><label for="f-place">ที่เก็บ *</label>
+        <select id="f-place" name="placeId" required disabled><option value="">ยังไม่มีที่เก็บในระบบ</option></select>
+        <div class="note note-warn" id="no-place">ยังไม่มีที่เก็บในระบบ — ให้ไปเพิ่มห้อง/ตู้/ชั้นที่หน้าแผนผังก่อน
+          แล้วค่อยกลับมารับของเข้า ${goMap}</div></div>`;
+    }
+    return `<div class="field" ${span}><label for="f-place">ที่เก็บ *</label>
+      <select id="f-place" name="placeId" required>
+        ${placeOptions(st.v.placeId || '', { blank: '— เลือกที่เก็บ —' })}</select>
+      <div class="hint">ถ้าไม่มีที่เก็บที่ต้องการ ให้ไปเพิ่มที่หน้าแผนผังก่อน ${goMap}</div></div>`;
   }
 
   /* ── รูปของล็อตที่กำลังรับเข้า ───────────────────────────────────────── */
@@ -311,7 +334,7 @@ export function openItemForm(o) {
     const k = st.v;
     st.mode = 'lot'; st.materialId = materialId; st.mat = mat;
     st.v = {
-      qty: k.qty, room: k.room, shelf: k.shelf, legacyCode: k.legacyCode,
+      qty: k.qty, placeId: k.placeId, legacyCode: k.legacyCode,
       supplier: k.supplier || mat.supplier || '', supplierLotNo: k.supplierLotNo,
       receiveDate: k.receiveDate, expireDate: k.expireDate, fiscalYear: k.fiscalYear,
       unitPrice: k.unitPrice, notes: k.notes
@@ -322,6 +345,16 @@ export function openItemForm(o) {
   }
 
   m.el.addEventListener('click', async e => {
+    if (e.target.closest('[data-go-map]')) {
+      m.close();
+      location.hash = '#/map';
+      return;
+    }
+    if (e.target.closest('[data-move-lot]')) {
+      m.close();
+      moveDialog(st.lotId, o.onSaved);
+      return;
+    }
     const use = e.target.closest('[data-use]');
     if (use) return switchToLot(use.dataset.use);
 
@@ -358,8 +391,14 @@ export function openItemForm(o) {
       return;
     }
 
+    // ที่เก็บส่งเฉพาะตอนรับเข้า — ตอนแก้ไขต้องย้ายผ่าน "ย้ายที่เก็บ" (หลังบ้านก็ปฏิเสธเช่นกัน)
+    if (st.mode !== 'edit' && !f.placeId) {
+      err.textContent = 'กรุณาเลือกที่เก็บ — ถ้ายังไม่มี ให้ไปเพิ่มที่หน้าแผนผังก่อน';
+      return;
+    }
     const lotPart = {
-      room: f.room, shelf: f.shelf, supplier: f.supplier, supplierLotNo: f.supplierLotNo,
+      placeId: st.mode === 'edit' ? undefined : f.placeId,
+      supplier: f.supplier, supplierLotNo: f.supplierLotNo,
       legacyCode: f.legacyCode, receiveDate: f.receiveDate, expireDate: f.expireDate,
       fiscalYear: f.fiscalYear, unitPrice: f.unitPrice, notes: f.notes
     };

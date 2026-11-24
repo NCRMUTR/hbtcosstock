@@ -328,7 +328,11 @@ function wire() {
       if (act === 'toggle-edit') { st.edit = !st.edit; st.assign = ''; return draw(); }
       if (act === 'cancel-assign') { st.assign = ''; return draw(); }
       if (act === 'clear-sel') { st.sel = ''; return draw(); }
-      if (act === 'add-item-child') return openItemForm({ mode: 'new', onSaved: reload });
+      if (act === 'add-item-child') {
+        const target = st.sel && placeOf(st.sel);
+        // กด "รับเข้าที่ชั้นนี้" แล้วต้องเลือกชั้นนั้นไว้ให้เลย ไม่ต้องหาในรายการอีกรอบ
+        return openItemForm({ mode: 'new', placeId: target ? target.id : p.id, onSaved: reload });
+      }
 
       const c = st.sel && placeOf(st.sel);
       if (act === 'edit-child' && c) {

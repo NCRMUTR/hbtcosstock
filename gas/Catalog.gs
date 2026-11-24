@@ -239,6 +239,11 @@ function lotSave_(p, ctx) {
 
   // สร้างสารใหม่พร้อมกันในคำสั่งเดียว (ทำนอก lock ของล็อต เพราะ materialSave_ ถือ lock เอง)
   var materialId = s_(p.materialId, 20);
+  // ตรวจที่เก็บก่อนสร้างสาร — ถ้าไปเจอทีหลังใน lock สารใหม่จะถูกสร้างค้างไว้โดยไม่มีล็อต
+  if (!lotId && p.placeId && !activePlaces_().some(function (x) { return String(x.PlaceID) === s_(p.placeId, 20); })) {
+    throw new AppError('ไม่พบที่เก็บที่เลือก (อาจถูกลบไปแล้ว) — กดซิงก์ข้อมูลแล้วเลือกใหม่ ' +
+                       'หรือเพิ่มที่เก็บที่หน้าแผนผังก่อน', 'NO_PLACE');
+  }
   if (!lotId && !materialId && p.material) {
     materialId = materialSave_(p.material, ctx).materialId;
   }
@@ -255,6 +260,13 @@ function lotSave_(p, ctx) {
         throw new AppError(
           'แก้จำนวนที่รับเข้าของล็อตที่บันทึกแล้วไม่ได้ — ยอดคงเหลือมาจากบัญชีเดินสะพัด\n' +
           'ถ้ายอดจริงไม่ตรง ให้ใช้ "ปรับยอด" แทน', 'QTY_LOCKED');
+      }
+
+      // ย้ายที่ผ่านการแก้ไขจะไม่มีรายการ MOVE ในประวัติ — บังคับให้ไปทางย้ายที่เก็บแทน
+      if (p.placeId !== undefined) {
+        throw new AppError(
+          'เปลี่ยนที่เก็บของล็อตเดิมผ่านการแก้ไขข้อมูลไม่ได้ — ให้ใช้ปุ่ม "ย้ายที่เก็บ" ' +
+          'เพื่อให้การย้ายถูกบันทึกในประวัติ', 'USE_MOVE');
       }
 
       var patch = lotFields_(p);
@@ -280,6 +292,24 @@ function lotSave_(p, ctx) {
 
     var f = lotFields_(p);
     assertLegacyCodeFree_(lots, f.LegacyCode, null);
+
+    // เลือกที่เก็บจากแผนผัง → ข้อความห้อง/ชั้นมาจากที่เก็บนั้นเสมอ ไม่ใช่ที่พิมพ์มา
+    // ของที่รับเข้าจึงขึ้นบนแผนผังทันที และชื่อห้อง/ชั้นตรงกับแผนผังทุกตัวอักษร
+    var placeId = s_(p.placeId, 20);
+    var fromPlace = false;
+    if (placeId) {
+      var places = activePlaces_();
+      var dest = places.filter(function (x) { return String(x.PlaceID) === placeId; })[0];
+      if (!dest) {
+        throw new AppError('ไม่พบที่เก็บที่เลือก (อาจถูกลบไปแล้ว) — กดซิงก์ข้อมูลแล้วเลือกใหม่ ' +
+                           'หรือเพิ่มที่เก็บที่หน้าแผนผังก่อน', 'NO_PLACE');
+      }
+      var text = placeTextFor_(places, placeId);
+      f.PlaceID = placeId;
+      f.Room    = text.Room;
+      f.Shelf   = text.Shelf;
+      fromPlace = true;
+    }
 
     var now = new Date();
     var receive = f.ReceiveDate || now;
@@ -311,8 +341,11 @@ function lotSave_(p, ctx) {
     }, ctx.email);
     appendRows_('TRANSACTIONS', [txn]);
 
-    feedSettingsFromLot_(f, ctx.email);
-    audit_(ctx.email, 'LOT_ADD', 'Lots', f.LotID, { material: materialId, qty: qty });
+    // ห้อง/ชั้นที่มาจากแผนผังเป็นเส้นทางเต็ม ไม่ต้องไปเพิ่มเป็นรายการตัวเลือกแบบพิมพ์เอง
+    feedSettingsFromLot_(fromPlace
+      ? { Supplier: f.Supplier, FiscalYear: f.FiscalYear } : f, ctx.email);
+    audit_(ctx.email, 'LOT_ADD', 'Lots', f.LotID,
+           fromPlace ? { material: materialId, qty: qty, place: placeId } : { material: materialId, qty: qty });
 
     return { lotId: f.LotID, materialId: materialId, txnId: txn.TxnID, created: true };
   });
