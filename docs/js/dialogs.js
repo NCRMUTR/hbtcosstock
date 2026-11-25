@@ -217,7 +217,13 @@ export function lightbox(photo) {
  *  เพราะรูปจากกล้องมือถือมักตะแคงหรือเบลอ และรูปหลักของชั้นวางถูกใช้วางปุ่ม
  *  ถ้าอัปรูปผิดไปแล้วต้องลากปุ่มใหม่ทั้งชั้น
  */
-export function photosDialog({ ownerType, ownerId, title, hint, onDone }) {
+/**
+ * หน้าต่างรูปของที่เก็บ / สาร / ล็อต
+ * @param {Object}  o
+ * @param {File[]} [o.initialFiles]  รูปที่ถ่ายมาแล้วจากปุ่มลัด "ถ่ายรูป" — เข้าแถบรอทันที
+ * @param {Object} [o.confirmFor]    { name, code, kind } บอกชัด ๆ ว่ารูปจะไปแนบกับรายการไหน
+ */
+export function photosDialog({ ownerType, ownerId, title, hint, onDone, initialFiles, confirmFor }) {
   const editable = can('staff');
   const maxSide  = ownerType === 'PLACE' ? CFG2.PHOTO_MAX_SIDE_PLACE : CFG2.PHOTO_MAX_SIDE_ITEM;
   const maxPer   = CFG2.PHOTO_MAX_PER_OWNER || 8;
@@ -273,7 +279,10 @@ export function photosDialog({ ownerType, ownerId, title, hint, onDone }) {
   function stageHtml() {
     if (!staged.length) return '';
     const anyFailed = staged.some(s => s.failed);
-    return `<div class="pd-stage" id="pd-stage">
+    return `<div class="pd-stage${staged.length === 1 ? ' is-single' : ''}" id="pd-stage">
+      ${confirmFor ? `<div class="pd-confirm">จะแนบรูปให้${esc(confirmFor.kind || '')}
+        <b>${esc(confirmFor.name)}</b> <span class="mono">${esc(confirmFor.code)}</span>
+        <span class="muted">— ดูให้แน่ใจว่าถูกตัว แล้วกด "อัปโหลด"</span></div>` : ''}
       <div class="pd-stage-head">
         <b>รูปที่เลือกไว้ ${staged.length} รูป</b>
         <span class="muted">ยังไม่ได้อัปโหลด — หมุนหรือลบออกได้ก่อน</span>
@@ -291,6 +300,7 @@ export function photosDialog({ ownerType, ownerId, title, hint, onDone }) {
       </div>
       <div class="pd-stage-foot">
         <button class="btn" data-up="go">อัปโหลด ${staged.length} รูป</button>
+        ${hasCamera() && staged.length === 1 ? `<button class="btn btn-ghost" data-retake="1">ถ่ายใหม่</button>` : ''}
         ${hasCamera() ? `<button class="btn btn-ghost" data-pick="cam">+ ถ่ายอีกรูป</button>` : ''}
         <button class="btn btn-ghost" data-pick="file">+ เลือกเพิ่ม</button>
         <button class="btn btn-ghost" data-up="clear">ล้างทั้งหมด</button>
@@ -396,6 +406,13 @@ export function photosDialog({ ownerType, ownerId, title, hint, onDone }) {
       const cam = t.dataset.pick === 'cam';
       return addFiles(await pickImages({ capture: cam, multiple: !cam }));
     }
+    if (t.dataset.retake) {
+      // ถ่ายใหม่แทนรูปเดิม — ถ้ากดยกเลิกกล้อง ให้เก็บรูปเดิมไว้ ไม่ใช่ทิ้งไปเฉย ๆ
+      const files = await pickImages({ capture: true });
+      if (!files.length) return;
+      dropStaged(staged.map(s => s.key));
+      return addFiles(files);
+    }
     if (t.dataset.rot) {
       const s = staged.find(x => x.key === t.dataset.rot);
       if (s) { s.rot = (s.rot + 90) % 360; s.failed = false; render(); }
@@ -457,6 +474,7 @@ export function photosDialog({ ownerType, ownerId, title, hint, onDone }) {
   });
 
   render();
+  if (initialFiles && initialFiles.length) addFiles(initialFiles);
   return m;
 }
 

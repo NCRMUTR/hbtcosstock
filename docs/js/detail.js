@@ -3,7 +3,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { api, can } from './api.js';
 import { placeOf, photosOf } from './search.js';
-import { photoImg } from './photo.js';
+import { photoImg, pickImages, hasCamera } from './photo.js';
 import {
   $, $$, esc, toast, run, openModal, confirmBox, icon,
   fmtNum, fmtDate, fmtDateTime, fmtDays, TXN_TH
@@ -118,6 +118,16 @@ export function openLotDetail(lotId, onChanged) {
    * แถบรูปใต้หัวเรื่อง — ถ้าล็อตนี้ยังไม่มีรูปของตัวเอง ให้ยืมรูปของสารมาแสดงก่อน
    * (สารเดียวกันหน้าตาขวดมักเหมือนกัน เห็นภาพรวมได้เร็วกว่าไม่เห็นอะไรเลย)
    */
+  /**
+   * ปุ่มลัด "ถ่ายรูป" — กดแล้วเข้ากล้องทันที ไม่ต้องเปิดหน้าต่างรูปก่อน
+   * ลดโอกาสหยิบรูปผิดจากคลังภาพ โชว์เฉพาะเครื่องที่มีกล้อง (มือถือ/แท็บเล็ต)
+   * และคนที่เพิ่มรูปได้ บนคอมปุ่มนี้จะเปิดแค่หน้าต่างเลือกไฟล์ซึ่งสับสน
+   */
+  function camBtn(act) {
+    if (!can('staff') || !hasCamera()) return '';
+    return `<button class="btn btn-sm" data-act="${act}">${icon.camera} ถ่ายรูป</button>`;
+  }
+
   function photoStripHtml() {
     const lotPics = photosOf('LOT', it.lotId);
     const matPics = photosOf('MATERIAL', it.materialId);
@@ -129,6 +139,7 @@ export function openLotDetail(lotId, onChanged) {
       ${show.slice(0, 4).map(p => `<button class="ph-thumb" data-pic="${esc(p.id)}"
           data-powner="${owner}" title="ดูรูปใหญ่">${photoImg(p, 200, { noRatio: true })}</button>`).join('')}
       ${show.length > 4 ? `<span class="ph-more">+${show.length - 4}</span>` : ''}
+      ${camBtn('camlot')}
       <button class="btn btn-ghost btn-sm" data-act="photos">${icon.camera}
         ${lotPics.length ? `รูปของล็อตนี้ (${lotPics.length})` : (can('staff') ? 'เพิ่มรูปล็อตนี้' : 'รูปของล็อตนี้')}</button>
       ${borrowed ? '<span class="muted ph-hint">กำลังแสดงรูปของสาร — ล็อตนี้ยังไม่มีรูปของตัวเอง</span>' : ''}
@@ -149,6 +160,7 @@ export function openLotDetail(lotId, onChanged) {
         ${photosOf('MATERIAL', it.materialId).slice(0, 4).map(p =>
           `<button class="ph-thumb" data-pic="${esc(p.id)}" data-powner="MATERIAL"
                    title="ดูรูปใหญ่">${photoImg(p, 200, { noRatio: true })}</button>`).join('')}
+        ${camBtn('cammat')}
         <button class="btn btn-ghost btn-sm" data-act="matphotos">${icon.camera}
           รูปของสารนี้ (${photosOf('MATERIAL', it.materialId).length})</button>
         <span class="muted ph-hint">รูปของสารใช้ร่วมกันทุกล็อต เช่น ฉลากข้างขวด หรือหน้า SDS</span>
@@ -220,6 +232,29 @@ export function openLotDetail(lotId, onChanged) {
                           to === 'Eliminate' ? 'ทำเครื่องหมายแล้ว' : 'คงไว้บนชั้นแล้ว');
       if (r.ok) await refresh();
       return;
+    }
+
+    if (act === 'camlot' || act === 'cammat') {
+      const isLot     = act === 'camlot';
+      const ownerType = isLot ? 'LOT' : 'MATERIAL';
+      const ownerId   = isLot ? lotId : it.materialId;
+      const maxPer    = window.APP_CONFIG.PHOTO_MAX_PER_OWNER || 8;
+      if (photosOf(ownerType, ownerId).length >= maxPer) {
+        toast(`ครบ ${maxPer} รูปแล้ว — ลบรูปเดิมออกก่อน (กดปุ่มรูปข้าง ๆ)`, 'risk');
+        return;
+      }
+      // ต้องเปิดกล้องก่อน await อื่นใด เบราว์เซอร์ยอมเปิดหน้าต่างไฟล์/กล้องเฉพาะตอนที่ผู้ใช้เพิ่งกดเท่านั้น
+      const files = await pickImages({ capture: true });
+      if (!files.length) return;                         // กดยกเลิกกล้อง → ไม่ต้องเปิดอะไร
+      return photosDialog({
+        ownerType, ownerId,
+        title: (isLot ? 'รูปของล็อต ' : 'รูปของสาร ') + it.name,
+        hint: isLot ? 'ถ่ายขวดจริง ฉลาก หรือจุดที่วางไว้ เพื่อให้คนอื่นหยิบถูกใบ'
+                    : 'รูปชุดนี้ใช้ร่วมกันทุกล็อตของสารนี้',
+        initialFiles: files,
+        confirmFor: { name: it.name, code: ownerId, kind: isLot ? 'ล็อต' : 'สาร' },
+        onDone: refresh
+      });
     }
 
     if (act === 'photos') {

@@ -915,6 +915,10 @@ dialog.lightbox .modal-head { border-color: #223039; }
            font-size: .72rem; text-align: center; padding: 2px 4px; }
 .pd-sact { display: flex; justify-content: center; gap: 10px; padding: 4px; }
 .pd-sact .btn { padding: 2px 8px; }
+/* รูปเดียว (มักมาจากปุ่มถ่ายรูป) → โชว์ใหญ่ให้ตรวจได้ว่าถ่ายถูกขวด */
+.pd-stage.is-single .pd-stage-grid { grid-template-columns: minmax(0, 320px); }
+.pd-confirm { margin-bottom: 10px; line-height: 1.5; }
+.pd-confirm .mono { white-space: nowrap; }
 .pd-stage-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
 
 /* ลากไฟล์มาวางบนหน้าต่างรูป */
