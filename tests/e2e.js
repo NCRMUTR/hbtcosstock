@@ -888,6 +888,8 @@ const firstBalance = page =>
     await pp.click('[data-act="photos"]');
     await pp.waitForSelector('[data-pick="file"]');
     ok(await pp.locator('[data-pick="cam"]').count() === 0, 'เดสก์ท็อปไม่โชว์ปุ่มถ่ายรูป (กดไปก็ได้แค่หน้าต่างเลือกไฟล์)');
+    ok(await pp.locator('[data-act="camlot"], [data-act="cammat"]').count() === 0,
+       'เดสก์ท็อปไม่โชว์ปุ่มลัดถ่ายรูปในหน้ารายละเอียด');
 
     // เลือก 2 รูป → ต้องเข้าแถบรอ ไม่ใช่อัปขึ้นทันที
     await choose(pp, () => pp.click('[data-pick="file"]'), [FIX_ROOM, FIX_CAB]);
@@ -1033,6 +1035,74 @@ const firstBalance = page =>
     await vp.waitForSelector('.pd-grid');
     ok(await vp.locator('[data-pick]').count() === 0, 'viewer เพิ่มรูปไม่ได้');
     ok(await vp.locator('[data-del]').count() === 0, 'viewer ลบรูปไม่ได้');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  sec('มือถือ: ปุ่มลัดถ่ายรูป → ยืนยัน → อัปโหลด');
+  {
+    const cm = await openAs(browser, 'staff',
+      { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    await cm.fill('#q', 'niacinamide');
+    await cm.waitForTimeout(300);
+    await cm.click('#tbody tr:first-child .name-btn');
+    await cm.waitForSelector('dialog .kv');
+    const camLotId = (await cm.locator('dialog .kv .mono').first().textContent()).trim();
+
+    ok(await cm.locator('[data-act="camlot"]').count() === 1, 'มือถือเห็นปุ่มลัด "ถ่ายรูป" ของล็อตในหน้ารายละเอียด');
+    await cm.click('[data-tab="info"]');
+    await cm.waitForSelector('[data-act="matphotos"]');
+    ok(await cm.locator('[data-act="cammat"]').count() === 1, 'มือถือเห็นปุ่มลัด "ถ่ายรูป" ของสารในแท็บข้อมูลรายการ');
+    const camMatId = (await cm.locator('dialog .kv .mono').first().textContent()).trim();
+
+    // ยกเลิกกล้อง → ต้องไม่มีหน้าต่างใหม่เปิดขึ้นมา และไม่มีรูปถูกส่ง
+    const matBefore = (await photosOfApi('MATERIAL', camMatId)).length;
+    const dlgBefore = await cm.locator('dialog[open]').count();
+    await choose(cm, () => cm.click('[data-act="cammat"]'), []);
+    await cm.waitForTimeout(1200);
+    ok(await cm.locator('dialog[open]').count() === dlgBefore, 'กดยกเลิกกล้องแล้วไม่มีหน้าต่างค้าง');
+    ok((await photosOfApi('MATERIAL', camMatId)).length === matBefore, 'กดยกเลิกกล้องแล้วไม่มีรูปถูกส่ง');
+
+    // ถ่ายรูปของล็อต: ปุ่มต้องเปิดกล้องหลังตรง ๆ ไม่ใช่หน้าต่างเลือกไฟล์
+    await cm.waitForSelector('[data-act="camlot"]');
+    const lotBefore = (await photosOfApi('LOT', camLotId)).length;
+    const [fc] = await Promise.all([cm.waitForEvent('filechooser'), cm.click('[data-act="camlot"]')]);
+    ok(await fc.element().getAttribute('capture') === 'environment', 'ปุ่มลัดสั่งเปิดกล้องหลัง (capture=environment)');
+    ok(!fc.isMultiple(), 'ถ่ายทีละรูป');
+    await fc.setFiles([FIX_ROOM]);
+
+    await cm.waitForSelector('.pd-confirm');
+    const conf = await cm.locator('.pd-confirm').textContent();
+    ok(conf.indexOf(camLotId) !== -1, 'หน้ายืนยันบอกรหัสล็อตที่จะแนบรูป', conf.trim());
+    ok(await cm.locator('.pd-sitem').count() === 1, 'รูปที่ถ่ายเข้าแถบรอ ยังไม่ส่งจนกว่าจะกดอัปโหลด');
+    ok(await cm.locator('.pd-stage.is-single').count() === 1, 'รูปเดียวโชว์ใหญ่ให้ตรวจ');
+    ok((await photosOfApi('LOT', camLotId)).length === lotBefore, 'ยังไม่ส่งขึ้นเซิร์ฟเวอร์ก่อนยืนยัน');
+
+    // ถ่ายใหม่ต้องแทนรูปเดิม ไม่ใช่เพิ่มเป็น 2 รูป
+    await choose(cm, () => cm.click('[data-retake]'), [FIX_CAB]);
+    await cm.waitForTimeout(300);
+    ok(await cm.locator('.pd-sitem').count() === 1, 'กด "ถ่ายใหม่" แล้วรูปใหม่แทนรูปเดิม');
+    ok(!(await cm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)),
+       'มือถือ: หน้ายืนยันไม่ทำให้จอล้น');
+    await cm.screenshot({ path: SHOTS + '/11-camera-confirm.png' });
+
+    await cm.click('[data-up="go"]');
+    await cm.waitForFunction(() => !document.querySelector('.pd-stage'), null, { timeout: 30000 });
+    const after = await photosOfApi('LOT', camLotId);
+    ok(after.length === lotBefore + 1, 'ถ่ายแล้วรูปเข้าล็อตที่ถูกตัว 1 รูป', lotBefore + ' → ' + after.length);
+    const last = after[after.length - 1];
+    ok(last && last.h > last.w, 'รูปที่ส่งคือรูปที่ถ่ายใหม่ (แนวตั้ง) ไม่ใช่รูปแรกที่ถ่ายทิ้ง',
+       last ? last.w + 'x' + last.h : '');
+    ok((await photosOfApi('MATERIAL', camMatId)).length === matBefore, 'รูปไม่หลุดไปเข้าสาร');
+    await closeDialogs(cm);
+
+    // viewer บนมือถือต้องไม่เห็นปุ่มลัด
+    const vm = await openAs(browser, 'viewer',
+      { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    await vm.fill('#q', 'niacinamide');
+    await vm.waitForTimeout(300);
+    await vm.click('#tbody tr:first-child .name-btn');
+    await vm.waitForSelector('dialog .kv');
+    ok(await vm.locator('[data-act="camlot"], [data-act="cammat"]').count() === 0, 'viewer บนมือถือไม่เห็นปุ่มลัดถ่ายรูป');
   }
 
   // ═══════════════════════════════════════════════════════════════════════
