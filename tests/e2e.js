@@ -72,6 +72,22 @@ async function apiCall(action, payload, session) {
   return j.data;
 }
 
+/** ที่เก็บทั้งหมดจาก snapshot ของจริง เป็น object ต่อแถว */
+async function placesApi() {
+  const snap = await apiCall('snapshot', {}, SESS.admin.session);
+  const f = snap.places.fields;
+  return snap.places.rows.map(r => Object.fromEntries(f.map((k, i) => [k, r[i]])));
+}
+
+/** ลากบนรูปที่เก็บ ตามสัดส่วนของรูป (0–1) — เลื่อนจอให้เห็นทั้งรูปและแถบคำสั่งก่อน */
+async function dragOn(page, fx0, fy0, fx1, fy1) {
+  await page.evaluate(() => { const b = document.getElementById('zbar') || document.getElementById('stage'); b.scrollIntoView({ block: 'end' }); });
+  const b = await page.locator('#stage').boundingBox();
+  await page.mouse.move(b.x + b.width * fx0, b.y + b.height * fy0); await page.mouse.down();
+  await page.mouse.move(b.x + b.width * fx1, b.y + b.height * fy1, { steps: 6 });
+  await page.mouse.up();
+}
+
 /** รูปทั้งหมดของเจ้าของรายการหนึ่ง จาก snapshot ของจริง */
 async function photosOfApi(ownerType, ownerId) {
   const snap = await apiCall('snapshot', {}, SESS.admin.session);
@@ -536,45 +552,219 @@ const firstBalance = page =>
      'รายการย้ายที่ไม่มีปุ่มยกเลิก (ต้องย้ายกลับแทน)');
   await closeDialogs(page);
 
-  sec('โหมดจัดวางปุ่ม — ลากสร้างปุ่มใหม่บนรูป');
+  sec('โหมดจัดวางปุ่ม — ลากสร้างปุ่มใหม่ทันที ไม่ต้องกรอกหน้าต่าง');
+  const cabId = (await placesApi()).find(p => p.Name === 'ตู้เก็บสารไวไฟ').PlaceID;
+  const saves = [];
+  const onReq = r => { if (r.method() === 'POST' && /"place\.save"/.test(r.postData() || '')) saves.push(r.postData()); };
+  page.on('request', onReq);
+  const zoneSel = n => `.zone[title="${n}"]`;
+  const leftOf = async n => parseFloat(await page.locator(zoneSel(n)).evaluate(e => e.style.left));
+  const topOf  = async n => parseFloat(await page.locator(zoneSel(n)).evaluate(e => e.style.top));
+
   await page.click('[data-act="toggle-edit"]');
   await page.waitForSelector('.stage.editing');
-  await page.waitForTimeout(400);
-  await page.locator('#stage').scrollIntoViewIfNeeded();
-  const box = await page.locator('#stage').boundingBox();
-  const x0 = box.x + box.width * 0.2, y0 = box.y + box.height * 0.955;
-  await page.mouse.move(x0, y0); await page.mouse.down();
-  await page.mouse.move(x0 + box.width * 0.25, y0 + box.height * 0.035, { steps: 6 });
-  await page.mouse.up();
-  await page.waitForSelector('#pl-form');
-  await page.fill('#pl-name', 'ชั้นล่างสุด');
-  await page.click('#pl-ok');
-  await page.waitForSelector('.zone[title="ชั้นล่างสุด"]', { timeout: 20000 });
-  ok(true, 'ลากบนรูปแล้วสร้างปุ่มชั้นใหม่ได้');
+  ok(await page.locator('#zbar').count() === 1, 'เข้าโหมดจัดวางแล้วมีแถบคำสั่ง');
+  ok(await page.locator('#zbar [data-ed="save"]').isDisabled(), 'ยังไม่แก้อะไร ปุ่มบันทึกกดไม่ได้');
+  await page.waitForTimeout(300);
+  await dragOn(page, 0.2, 0.955, 0.45, 0.99);
+  await page.waitForSelector(zoneSel('ชั้น 5'), { timeout: 5000 });
+  ok(await page.locator('#pl-form').count() === 0, 'ลากแล้วไม่มีหน้าต่างให้กรอก');
+  ok(await page.locator(zoneSel('ชั้น 5') + '.new.sel').count() === 1, 'ปุ่มใหม่ได้ชื่อถัดไป "ชั้น 5" และถูกเลือกไว้');
+  ok(saves.length === 0, 'ยังไม่ส่งอะไรขึ้นเซิร์ฟเวอร์จนกว่าจะกดบันทึก', String(saves.length));
+  ok(/1/.test(await page.textContent('#zbar [data-ed="save"]')), 'ปุ่มบันทึกบอกจำนวนที่รอบันทึก');
   await page.screenshot({ path: SHOTS + '/12-map-edit.png' });
 
-  // ย้ายปุ่ม
-  const zb = await page.locator('.zone[title="ชั้นล่างสุด"]').boundingBox();
-  const leftBefore = await page.locator('.zone[title="ชั้นล่างสุด"]').evaluate(e => e.style.left);
+  // ตั้งชื่อในแถบคำสั่ง
+  await page.fill('#zb-name', 'ชั้นล่างสุด');
+  await page.press('#zb-name', 'Enter');
+  await page.waitForSelector(zoneSel('ชั้นล่างสุด'));
+  ok(true, 'เปลี่ยนชื่อปุ่มจากแถบคำสั่งได้');
+
+  // ย้ายปุ่ม (ในเครื่อง ไม่โหลดใหม่)
+  const leftBefore = await leftOf('ชั้นล่างสุด');
+  const zb = await page.locator(zoneSel('ชั้นล่างสุด')).boundingBox();
   await page.mouse.move(zb.x + zb.width / 2, zb.y + zb.height / 2); await page.mouse.down();
   await page.mouse.move(zb.x + zb.width / 2 + 60, zb.y + zb.height / 2, { steps: 5 });
   await page.mouse.up();
-  await page.waitForFunction(b => {
-    const z = document.querySelector('.zone[title="ชั้นล่างสุด"]');
-    return z && z.style.left !== b;
-  }, leftBefore, { timeout: 20000 });
-  ok(true, 'ลากย้ายปุ่มได้');
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(150);
+  ok(await leftOf('ชั้นล่างสุด') > leftBefore + 1, 'ลากย้ายปุ่มได้ทันที', `${leftBefore} → ${await leftOf('ชั้นล่างสุด')}`);
 
-  // ปรับขนาด
-  const zb2 = await page.locator('.zone[title="ชั้นล่างสุด"]').boundingBox();
+  // ปรับขนาดด้วยมุม
+  const zb2 = await page.locator(zoneSel('ชั้นล่างสุด')).boundingBox();
   await page.mouse.move(zb2.x + zb2.width - 1, zb2.y + zb2.height - 1); await page.mouse.down();
   await page.mouse.move(zb2.x + zb2.width + 40, zb2.y + zb2.height, { steps: 4 });
   await page.mouse.up();
-  await page.waitForTimeout(1500);
-  const w1 = (await page.locator('.zone[title="ชั้นล่างสุด"]').boundingBox()).width;
+  await page.waitForTimeout(150);
+  const w1 = (await page.locator(zoneSel('ชั้นล่างสุด')).boundingBox()).width;
   ok(w1 > zb2.width + 20, 'ลากมุมปรับขนาดปุ่มได้', `${zb2.width} → ${w1}`);
 
+  // ย้อนกลับ
+  await page.click('#zbar [data-ed="undo"]');
+  await page.waitForTimeout(100);
+  const w2 = (await page.locator(zoneSel('ชั้นล่างสุด')).boundingBox()).width;
+  ok(Math.abs(w2 - zb2.width) < 2, 'กด "ย้อนกลับ" แล้วขนาดกลับเป็นเหมือนก่อนลาก', `${zb2.width} / ${w2}`);
+
+  // ปุ่มลูกศร
+  const l0 = await leftOf('ชั้นล่างสุด');
+  await page.click('#zbar [data-nudge="right"]');
+  await page.click('#zbar [data-nudge="right"]');
+  ok(Math.abs(await leftOf('ชั้นล่างสุด') - (l0 + 1)) < 0.01, 'ปุ่มลูกศรขยับทีละ 0.5% ของรูป', `${l0} → ${await leftOf('ชั้นล่างสุด')}`);
+  await page.click('#zbar [data-size="h+"]');
+  await page.click('#zbar .zb-more summary');
+  await page.click('#zbar [data-color="#99202f"]');
+  ok(/#99202f/.test(await page.locator(zoneSel('ชั้นล่างสุด')).getAttribute('style')), 'เลือกสีปุ่มจากแถบคำสั่งได้');
+  ok(saves.length === 0, 'แก้ไปหลายอย่างแล้ว ยังไม่มีคำขอขึ้นเซิร์ฟเวอร์สักครั้ง', String(saves.length));
+  const finalZone = await page.locator(zoneSel('ชั้นล่างสุด')).evaluate(e =>
+    ['left', 'top', 'width', 'height'].map(k => parseFloat(e.style[k]) / 100));
+
+  // บันทึกครั้งเดียว
+  await page.click('#zbar [data-ed="save"]');
+  await page.waitForFunction(() => /บันทึกแล้ว/.test(document.querySelector('#zbar [data-ed="save"]')?.textContent || ''),
+                             null, { timeout: 20000 });
+  ok(saves.length === 1, 'กดบันทึกแล้วส่งคำขอเดียว (สร้างปุ่มใหม่ 1 ปุ่ม)', String(saves.length));
+  {
+    const pl = (await placesApi()).find(p => p.Name === 'ชั้นล่างสุด' && p.ParentID === cabId);
+    ok(!!pl, 'ที่เก็บ "ชั้นล่างสุด" ถูกสร้างในตู้จริง');
+    ok(pl && pl.Kind === 'SHELF', 'ระดับเป็น "ชั้น" อัตโนมัติ', pl && pl.Kind);
+    ok(pl && pl.Color === '#99202f', 'สีที่เลือกถูกบันทึก', pl && pl.Color);
+    ok(pl && [pl.X, pl.Y, pl.W, pl.H].every((v, i) => Math.abs(Number(v) - finalZone[i]) < 0.0005),
+       'ตำแหน่งที่บันทึกตรงกับที่เห็นบนจอ (หลังย้าย ย้อนกลับ ขยับ และขยาย)', JSON.stringify([pl && [pl.X, pl.Y, pl.W, pl.H], finalZone]));
+  }
+  ok(await page.locator('.stage.editing').count() === 1, 'บันทึกแล้วยังอยู่ในโหมดจัดวางต่อได้');
+  ok(await page.locator(zoneSel('ชั้นล่างสุด') + '.new').count() === 0, 'ปุ่มที่บันทึกแล้วไม่ถูกทำเครื่องหมายว่า "ใหม่"');
+
+  sec('ยกเลิกที่แก้ทั้งหมด');
+  {
+    const t0 = await topOf('ชั้น 1');
+    await page.click(zoneSel('ชั้น 1'));
+    await page.click('#zbar [data-nudge="down"]');
+    await page.click('#zbar [data-nudge="down"]');
+    ok(await topOf('ชั้น 1') > t0, 'ขยับชั้น 1 ลง');
+    await page.click('#zbar [data-ed="revert"]');
+    await page.click('dialog[open] #cf-ok');
+    await page.waitForTimeout(150);
+    ok(Math.abs(await topOf('ชั้น 1') - t0) < 0.001, 'ยกเลิกที่แก้แล้วกลับตำแหน่งเดิม');
+    ok(await page.locator('#zbar [data-ed="save"]').isDisabled(), 'ไม่มีอะไรรอบันทึกแล้ว');
+  }
+
+  sec('ออกจากหน้าระหว่างยังไม่บันทึก → ถามก่อน');
+  {
+    await page.click(zoneSel('ชั้น 1'));
+    await page.click('#zbar [data-nudge="left"]');
+    const tShifted = await leftOf('ชั้น 1');
+    await page.click('#rail-nav [data-page="stock"]');
+    await page.waitForSelector('dialog[open] #cf-ok');
+    ok(/ยังไม่ได้บันทึก/.test(await page.textContent('dialog[open]')), 'เปลี่ยนหน้าแล้วมีหน้าต่างเตือนงานค้าง');
+    await page.locator('dialog[open] [data-close]').last().click();
+    await page.waitForTimeout(200);
+    ok(await page.locator('.stage.editing').count() === 1 && Math.abs(await leftOf('ชั้น 1') - tShifted) < 0.001,
+       'กด "กลับไปบันทึก" แล้วยังอยู่ที่เดิม งานไม่หาย');
+    await page.click('.crumbs [data-go=""]');
+    await page.waitForSelector('dialog[open] #cf-ok');
+    await page.locator('dialog[open] [data-close]').last().click();
+    await page.waitForTimeout(150);
+    ok(await page.locator('.stage.editing').count() === 1, 'กดลิงก์ "แผนผัง" ด้านบนก็ถามก่อนเช่นกัน');
+
+    saves.length = 0;
+    await page.click('[data-act="toggle-edit"]');
+    await page.waitForSelector('.stage:not(.editing)', { timeout: 20000 });
+    ok(saves.length === 1, 'กด "บันทึกและเสร็จสิ้น" แล้วบันทึกให้ก่อนออก', String(saves.length));
+    const p1 = (await placesApi()).find(p => p.Name === 'ชั้น 1' && p.ParentID === cabId);
+    ok(Math.abs(Number(p1.X) * 100 - tShifted) < 0.01, 'ตำแหน่งชั้น 1 ที่ขยับไว้ถูกบันทึก', `${p1.X} / ${tShifted}`);
+  }
+
+  sec('แบ่งชั้นอัตโนมัติ');
+  {
+    await page.click('[data-act="toggle-edit"]');
+    await page.waitForSelector('.stage.editing');
+    await page.click('#zbar [data-ed="split"]');
+    await page.waitForSelector('#sp-form');
+    ok(await page.inputValue('#sp-prefix') === 'ชั้น', 'ในตู้ ชื่อขึ้นต้นตั้งต้นเป็น "ชั้น"');
+    ok(await page.inputValue('#sp-start') === '5', 'เลขเริ่มต่อจากชั้นที่มีอยู่ (ชั้น 1–4 → 5)', await page.inputValue('#sp-start'));
+
+    await page.fill('#sp-start', '1');
+    await page.waitForTimeout(100);
+    ok(/อยู่บนรูปแล้ว/.test(await page.textContent('#sp-err')) && await page.locator('#sp-ok').isDisabled(),
+       'เลขเริ่มที่ชนกับชั้นที่มีปุ่มแล้ว → เตือนและกดต่อไม่ได้');
+
+    await page.fill('#sp-prefix', 'ถาด');
+    await page.fill('#sp-start', '1');
+    await page.fill('#sp-rows', '3');
+    await page.click('#sp-form [data-step="cols:1"]');
+    await page.check('#sp-form [name=order][value=bottom]');
+    await page.waitForTimeout(100);
+    ok(await page.locator('#sp-prev .sp-grid span').count() === 6, 'ตัวอย่างแสดง 3 ชั้น × 2 ช่อง = 6 ปุ่ม');
+    ok((await page.textContent('#sp-prev .sp-grid span:first-child')) === 'ถาด 3 ช่อง 1',
+       'นับจากชั้นล่างสุด → ช่องซ้ายบนคือ "ถาด 3 ช่อง 1"', await page.textContent('#sp-prev .sp-grid span:first-child'));
+    await page.click('#sp-whole');
+    await page.waitForSelector(zoneSel('ถาด 1 ช่อง 2'));
+    ok(await page.locator('.zone.new').count() === 6, 'กด "ใช้ทั้งรูป" แล้วได้ 6 ปุ่มทันที', String(await page.locator('.zone.new').count()));
+    ok(await topOf('ถาด 3 ช่อง 1') < await topOf('ถาด 1 ช่อง 1'), 'ถาด 1 อยู่ล่างสุดตามที่เลือก');
+    ok(await leftOf('ถาด 2 ช่อง 1') < await leftOf('ถาด 2 ช่อง 2'), 'ช่อง 1 อยู่ซ้าย ช่อง 2 อยู่ขวา');
+    await page.click('#zbar [data-ed="undo"]');
+    await page.waitForTimeout(100);
+    ok(await page.locator('.zone.new').count() === 0, 'ย้อนกลับครั้งเดียว เอาปุ่มที่แบ่งออกหมดทั้งชุด');
+
+    // แบบลากกรอบ
+    await page.click('#zbar [data-ed="split"]');
+    await page.waitForSelector('#sp-form');
+    await page.fill('#sp-rows', '2');
+    await page.click('#sp-ok');
+    await page.waitForSelector('.stage.splitting');
+    ok(/ลากกรอบครอบ/.test(await page.textContent('.edit-bar')), 'มีข้อความบอกให้ลากกรอบครอบชั้นทั้งหมด');
+    await dragOn(page, 0.55, 0.3, 0.95, 0.7);
+    await page.waitForSelector(zoneSel('ชั้น 6'));
+    ok(await page.locator('.zone.new').count() === 2 && await page.locator('.stage.splitting').count() === 0,
+       'ลากกรอบครั้งเดียวได้ "ชั้น 5" และ "ชั้น 6"');
+    ok(Math.abs(await leftOf('ชั้น 5') - 55) < 1 && await topOf('ชั้น 6') > await topOf('ชั้น 5'),
+       'ปุ่มอยู่ในกรอบที่ลาก เรียงบนลงล่าง');
+
+    saves.length = 0;
+    await page.click('#zbar [data-ed="save"]');
+    await page.waitForFunction(() => /บันทึกแล้ว/.test(document.querySelector('#zbar [data-ed="save"]')?.textContent || ''),
+                               null, { timeout: 20000 });
+    ok(saves.length === 2, 'บันทึก 2 ปุ่มใหม่ = 2 คำขอ ครั้งเดียวจบ', String(saves.length));
+    const names = (await placesApi()).filter(p => p.ParentID === cabId).map(p => p.Name);
+    ok(names.includes('ชั้น 5') && names.includes('ชั้น 6'), 'ชั้น 5 และ ชั้น 6 อยู่ในตู้จริง', names.join(', '));
+  }
+
+  sec('บันทึกไม่ผ่าน → งานไม่หาย');
+  {
+    // มีคนอื่นสร้าง "ชั้น 7" ตัดหน้าระหว่างที่เรากำลังจัดวาง
+    await page.click('#zbar [data-ed="split"]');
+    await page.waitForSelector('#sp-form');
+    await page.fill('#sp-rows', '1');
+    ok(await page.inputValue('#sp-start') === '7', 'เลขเริ่มต่อจากชั้น 6 ที่เพิ่งบันทึก', await page.inputValue('#sp-start'));
+    await page.click('#sp-whole');
+    await page.waitForSelector(zoneSel('ชั้น 7'));
+    await apiCall('place.save', { parentId: cabId, name: 'ชั้น 7', kind: 'SHELF' }, SESS.admin.session);
+    await page.click('#zbar [data-ed="save"]');
+    await page.waitForSelector('.toast.is-risk', { timeout: 20000 });
+    ok(await page.locator('.zone.err').count() === 1, 'ปุ่มที่บันทึกไม่ผ่านยังอยู่ และมีกรอบสีแดง');
+    ok(/ซ้ำ|อยู่แล้ว/.test(await page.textContent('.toast.is-risk')), 'บอกเหตุผลว่าทำไมไม่ผ่าน');
+    await page.click('.zone.err');
+    await page.fill('#zb-name', 'ชั้น 8');
+    await page.press('#zb-name', 'Enter');
+    await page.click('#zbar [data-ed="save"]');
+    await page.waitForFunction(() => /บันทึกแล้ว/.test(document.querySelector('#zbar [data-ed="save"]')?.textContent || ''),
+                               null, { timeout: 20000 });
+    const names = (await placesApi()).filter(p => p.ParentID === cabId).map(p => p.Name);
+    ok(names.includes('ชั้น 8'), 'เปลี่ยนชื่อแล้วบันทึกซ้ำผ่าน', names.join(', '));
+
+    // ชั้น 8 กินเต็มรูป — เอาปุ่มออกจากรูป (ที่เก็บยังอยู่ ไปรอในรายการ "ยังไม่มีปุ่มบนรูป")
+    await page.click(zoneSel('ชั้น 8'));
+    await page.click('#zbar [data-ed="remove"]');
+    ok(await page.locator(zoneSel('ชั้น 8')).count() === 0, 'เอาปุ่มออกจากรูปแล้วหายจากรูป');
+    ok(await page.locator('#zbar .zb-chips [data-assign]', { hasText: 'ชั้น 8' }).count() === 1,
+       'ชื่อไปรออยู่ในแถบ "ยังไม่มีปุ่มบนรูป" วางใหม่ได้');
+    await page.click('#zbar [data-ed="save"]');
+    await page.waitForFunction(() => /บันทึกแล้ว/.test(document.querySelector('#zbar [data-ed="save"]')?.textContent || ''),
+                               null, { timeout: 20000 });
+    const s8 = (await placesApi()).find(p => p.Name === 'ชั้น 8' && p.ParentID === cabId);
+    ok(s8 && s8.W === '' , 'ที่เก็บชั้น 8 ยังอยู่ แต่ไม่มีตำแหน่งบนรูปแล้ว', s8 && String(s8.W));
+  }
+
+  page.off('request', onReq);
   await page.click('[data-act="toggle-edit"]');
   await page.waitForTimeout(300);
 
@@ -1038,6 +1228,87 @@ const firstBalance = page =>
   }
 
   // ═══════════════════════════════════════════════════════════════════════
+  sec('มือถือ: จัดวางปุ่มชั้นด้วยนิ้ว');
+  {
+    const mm = await openAs(browser, 'staff',
+      { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const cabId = (await placesApi()).find(p => p.Name === 'ตู้เก็บสารไวไฟ').PlaceID;
+    await mm.evaluate(() => { location.hash = '#/map'; });
+    await mm.waitForSelector('.room-card');
+    await mm.tap('.room-card');
+    await mm.waitForSelector('.zone[title="ตู้เก็บสารไวไฟ"]');
+    await mm.tap('.zone[title="ตู้เก็บสารไวไฟ"]');
+    await mm.waitForSelector('.side-card [data-go]');
+    await mm.tap('.side-card [data-go]');
+    await mm.waitForSelector('.zone[title="ชั้น 2"]');
+    await mm.tap('[data-act="toggle-edit"]');
+    await mm.waitForSelector('.stage.editing');
+
+    await mm.evaluate(() => window.scrollTo(0, 0));
+    await mm.waitForTimeout(200);
+    const bar = await mm.locator('#zbar').boundingBox();
+    ok(bar && bar.y >= 0 && bar.y + bar.height <= 844 + 1, 'มือถือ: แถบคำสั่งติดขอบล่างจอ เห็นได้โดยไม่ต้องเลื่อน',
+       bar && `${Math.round(bar.y)}+${Math.round(bar.height)}`);
+
+    await mm.tap('.zone[title="ชั้น 2"]');
+    await mm.waitForSelector('#zbar [data-nudge="down"]');
+    const nb = await mm.locator('#zbar [data-nudge="down"]').boundingBox();
+    ok(nb.width >= 44 && nb.height >= 44, 'มือถือ: ปุ่มลูกศรใหญ่พอสำหรับนิ้ว (≥ 44px)', `${nb.width}×${nb.height}`);
+    const hd = await mm.locator('.zone.sel .hd-se').boundingBox();
+    ok(hd && hd.width >= 30, 'มือถือ: มุมปรับขนาดใหญ่ขึ้น (≥ 30px)', hd && String(hd.width));
+
+    const top0 = parseFloat(await mm.locator('.zone[title="ชั้น 2"]').evaluate(e => e.style.top));
+    await mm.tap('#zbar [data-nudge="down"]');
+    await mm.tap('#zbar [data-nudge="down"]');
+    const top1 = parseFloat(await mm.locator('.zone[title="ชั้น 2"]').evaluate(e => e.style.top));
+    ok(Math.abs(top1 - (top0 + 1)) < 0.01, 'มือถือ: แตะลูกศรลง 2 ครั้ง ปุ่มเลื่อนลง 1%', `${top0} → ${top1}`);
+    await mm.tap('#zbar [data-ed="deselect"]');
+
+    // ลากด้วยนิ้วจริง (touch events) เพื่อสร้างปุ่มใหม่ — ขอบล่างของรูปต้องไม่ถูกแถบคำสั่งบัง
+    await mm.evaluate(() => window.scrollTo(0, 0));
+    await mm.evaluate(() => document.getElementById('stage').scrollIntoView({ block: 'start' }));
+    await mm.waitForTimeout(200);
+    const sb = await mm.locator('#stage').boundingBox();
+    const cdp = await mm.context().newCDPSession(mm);
+    const pt = (fx, fy) => [{ x: sb.x + sb.width * fx, y: sb.y + sb.height * fy }];
+    const hit = await mm.evaluate(([x, y]) => !!document.elementFromPoint(x, y).closest('#stage'), [pt(0.02, 0.955)[0].x, pt(0.02, 0.955)[0].y]);
+    ok(hit, 'มือถือ: แถบคำสั่งไม่บังขอบล่างของรูป');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(0.02, 0.955) });
+    for (let i = 1; i <= 6; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt(0.02 + 0.13 * i / 6, 0.955 + 0.035 * i / 6) });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await mm.waitForTimeout(300);
+    ok(await mm.locator('.zone.new').count() === 1, 'มือถือ: ลากนิ้วบนที่ว่างของรูปแล้วได้ปุ่มใหม่',
+       String(await mm.locator('.zone.new').count()));
+    const newName = await mm.locator('.zone.new').getAttribute('title');
+    ok(/^ชั้น \d+$/.test(newName || ''), 'มือถือ: ปุ่มใหม่ได้ชื่อชั้นถัดไปให้เอง', newName);
+    ok(!(await mm.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)),
+       'มือถือ: โหมดจัดวางไม่ทำให้จอล้น');
+    await mm.screenshot({ path: SHOTS + '/13-map-edit-mobile.png' });
+
+    // ใช้ click แทน tap: บน Chromium/Windows การแตะจำลองครั้งแรกหลังลากนิ้วผ่าน CDP ไม่เกิด click
+    // (เป็นข้อจำกัดของการจำลองสัมผัส ไม่ใช่ของหน้าเว็บ — การแตะปุ่มอื่นด้านบนทดสอบด้วย tap แล้ว)
+    await mm.locator('#zbar [data-ed="save"]').click();
+    // รอจนบันทึกเสร็จ หรือมีข้อความแจ้งปัญหา — ถ้าไม่ผ่านให้เห็นเหตุผลจริง ไม่ใช่แค่หมดเวลา
+    const saved = await mm.waitForFunction(() => {
+      const b = document.querySelector('#zbar [data-ed="save"]');
+      if (b && /บันทึกแล้ว/.test(b.textContent)) return 'ok';
+      const t = document.querySelector('.toast.is-risk, .toast.is-warn');
+      return t ? 'toast: ' + t.textContent : false;
+    }, null, { timeout: 45000 }).then(h => h.jsonValue())
+      .catch(async () => 'timeout: ' + await mm.evaluate(() =>
+        (document.querySelector('#zbar [data-ed="save"]') || {}).textContent + ' | ' +
+        [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' / ')));
+    ok(saved === 'ok', 'มือถือ: กดบันทึกแล้วบันทึกครบ', saved);
+    const all = (await placesApi()).filter(p => p.ParentID === cabId);
+    const s2 = all.find(p => p.Name === 'ชั้น 2');
+    ok(Math.abs(Number(s2.Y) * 100 - top1) < 0.01, 'มือถือ: บันทึกตำแหน่งที่ขยับด้วยลูกศรแล้ว', `${s2.Y} / ${top1}`);
+    ok(all.some(p => p.Name === newName && p.W !== ''), 'มือถือ: ปุ่มที่ลากด้วยนิ้วถูกบันทึก');
+    await mm.context().close();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
   sec('มือถือ: ปุ่มลัดถ่ายรูป → ยืนยัน → อัปโหลด');
   {
     const cm = await openAs(browser, 'staff',
@@ -1245,6 +1516,6 @@ const firstBalance = page =>
   }
   process.exit(fail || real.length ? 1 : 0);
 })().catch(e => {
-  console.error('E2E ล้มเหลว:', (e.stack || e.message).split('\n').slice(0, 3).join(' | '));
+  console.error('E2E ล้มเหลว:', (e.stack || e.message).split('\n').slice(0, 14).join(' | '));
   process.exit(2);
 });

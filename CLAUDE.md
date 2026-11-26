@@ -73,7 +73,7 @@ Apps Script ไม่รองรับ CORS preflight ดังนั้น **�
 ## 3. การทดสอบ
 
 ```bash
-npm test                 # หลังบ้าน 538 ข้อ บนตัวจำลอง Apps Script
+npm test                 # หลังบ้าน 538 ข้อ บนตัวจำลอง Apps Script + ร่างปุ่มบนรูป (tests/zones.test.mjs)
 npm run e2e              # หน้าเว็บจริงด้วย Chromium 167 ข้อ (ต้องมี playwright)
 npm run bundle           # รวม gas/*.gs → dist/Code.gs
 ```

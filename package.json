@@ -4,7 +4,7 @@
   "private": true,
   "description": "ระบบคลังสารเคมีและวัสดุของสาขาวิชา (GitHub Pages + Google Apps Script + Google Sheet)",
   "scripts": {
-    "test": "node tests/test.js",
+    "test": "node tests/test.js && node --no-warnings tests/zones.test.mjs",
     "bundle": "node tools/bundle.js",
     "mock": "node tests/server.js 8799",
     "e2e": "bash tests/restart.sh 8799 && node tests/e2e.js 8799"

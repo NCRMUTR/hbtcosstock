@@ -791,9 +791,76 @@ img.broken { visibility: hidden; }
 .hd { position: absolute; width: 16px; height: 16px; background: #fff; border: 2px solid var(--c, var(--petrol)); border-radius: 3px; z-index: 3; }
 .hd-nw { left: -9px; top: -9px; cursor: nwse-resize; } .hd-ne { right: -9px; top: -9px; cursor: nesw-resize; }
 .hd-sw { left: -9px; bottom: -9px; cursor: nesw-resize; } .hd-se { right: -9px; bottom: -9px; cursor: nwse-resize; }
-@media (pointer: coarse) { .hd { width: 24px; height: 24px; }
-  .hd-nw { left: -13px; top: -13px; } .hd-ne { right: -13px; top: -13px; }
-  .hd-sw { left: -13px; bottom: -13px; } .hd-se { right: -13px; bottom: -13px; } }
+/* นิ้วบนมือถือกว้างราว 40px — มุมเล็ก ๆ กดโดนยาก จึงขยายเป็น 30px และมีขอบโปร่งใสรอบ ๆ ช่วยรับนิ้ว */
+@media (pointer: coarse) { .hd { width: 30px; height: 30px; border-radius: 50%; }
+  .hd::after { content: ''; position: absolute; inset: -8px; }
+  .hd-nw { left: -16px; top: -16px; } .hd-ne { right: -16px; top: -16px; }
+  .hd-sw { left: -16px; bottom: -16px; } .hd-se { right: -16px; bottom: -16px; } }
+.stage.splitting { cursor: cell; }
+.stage.splitting .zone { opacity: .45; pointer-events: none; }
+.zone.new { border-style: dashed; }
+.zone.new .zone-n { font-family: inherit; font-size: 10px; }
+.zone.err { border-color: var(--risk); box-shadow: 0 0 0 2px var(--risk); }
+.edit-bar .spacer { flex: 1; }
+.muted-inv { opacity: .8; font-size: .82rem; }
+
+/* แถบคำสั่งระหว่างจัดวางปุ่ม — ติดขอบล่างจอ บนมือถือจึงไม่ต้องเลื่อนลงไปหาคำสั่ง */
+.zbar { margin-top: 8px; display: grid; gap: 8px; z-index: 6;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px; }
+@media (max-width: 880px) {
+  /* เผื่อที่ให้แถบคำสั่งใต้รูป ไม่ให้แถบบังขอบล่างของรูประหว่างลากสร้างปุ่ม */
+  .stage.editing { max-width: max(240px, calc((100vh - 340px) * var(--ar, 100))); }
+  .zbar { position: sticky; bottom: 0; box-shadow: 0 -4px 18px rgba(0,0,0,.12);
+    padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+}
+/* จอแคบมีแถบเมนูอยู่ขอบล่าง (สูงราว 60px) — แถบคำสั่งต้องลอยเหนือเมนู ไม่ใช่ซ่อนอยู่ข้างใต้ */
+@media (max-width: 760px) {
+  .zbar { bottom: 62px; padding-bottom: 10px; }
+  .stage.editing { max-width: max(240px, calc((100vh - 400px) * var(--ar, 100))); }
+}
+.zb-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.zb-main .btn svg { width: 1.05em; height: 1.05em; vertical-align: -2px; }
+.zb-n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; margin-left: 2px;
+  border-radius: 99px; background: #fff; color: var(--petrol); font-size: .78rem; font-weight: 700; }
+.zb-sel { display: grid; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.zb-name { flex: 1 1 180px; display: block; }
+.zb-name input { width: 100%; font-size: 1rem; }
+.zb-pad { gap: 10px; }
+.zb-grp { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.zb-ic { min-width: 44px; height: 44px; border: 1px solid var(--line); background: var(--card-sunk); color: var(--ink);
+  border-radius: var(--r); display: inline-grid; place-items: center; cursor: pointer; padding: 0 8px; touch-action: manipulation; }
+.zb-ic svg { width: 20px; height: 20px; }
+.zb-ic:hover { border-color: var(--ink-3); }
+.zb-ic:active { background: var(--line); }
+.zb-tx { font-size: .84rem; }
+.zb-colors .sw { width: 30px; height: 30px; }
+/* สีใช้ไม่บ่อย — พับเก็บไว้ แถบคำสั่งบนมือถือจึงเตี้ยลง บังรูปน้อยลง */
+.zb-more { display: inline-block; }
+.zb-more summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.zb-more summary::-webkit-details-marker { display: none; }
+.zb-more[open] .zb-colors { margin-top: 6px; }
+.zb-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--c); border: 1px solid var(--line); }
+.zb-chips .chip { margin: 0; }
+.zb-chips .chip.on { background: var(--petrol); color: #fff; border-color: var(--petrol); }
+.zb-err { color: var(--risk); font-size: .88rem; }
+.howto { margin: 6px 0 4px; padding-left: 1.2em; display: grid; gap: 4px; font-size: .92rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* หน้าต่างแบ่งชั้นอัตโนมัติ */
+.stepper { display: flex; align-items: stretch; }
+.stepper input { text-align: center; min-width: 0; flex: 1; border-radius: 0; }
+.stepper button { width: 44px; border: 1px solid var(--line); background: var(--card-sunk); font-size: 1.2rem; cursor: pointer; color: var(--ink); }
+.stepper button:first-child { border-radius: var(--r) 0 0 var(--r); border-right: 0; }
+.stepper button:last-child { border-radius: 0 var(--r) var(--r) 0; border-left: 0; }
+.sp-seg { display: flex; gap: 14px; flex-wrap: wrap; padding-top: 6px; }
+.sp-seg label { display: inline-flex; gap: 6px; align-items: center; font-weight: 400; }
+.sp-prev { max-height: 220px; overflow: auto; margin-top: 4px; }
+.sp-grid { display: grid; grid-template-columns: repeat(var(--cols, 1), minmax(0, 1fr)); gap: 4px;
+  border: 2px solid var(--line); border-radius: var(--r); padding: 4px; background: var(--card-sunk); }
+.sp-grid span { border: 1.5px solid var(--petrol); border-radius: 4px; padding: 4px 6px; font-size: .82rem; background: var(--card);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-grid span.re { border-style: dashed; }
+.field-err { color: var(--risk); font-size: .88rem; min-height: 1.2em; margin-top: 6px; }
 .draw-box { position: absolute; border: 2px dashed #fff; background: rgba(11,93,115,.35);
   outline: 1px solid var(--petrol); pointer-events: none; z-index: 4; }
 .zone.flash { animation: zflash .9s ease-in-out 3; z-index: 5; }
