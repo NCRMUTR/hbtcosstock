@@ -99,9 +99,16 @@ function buildRail(user) {
 
 /* ── เปลี่ยนหน้า ─────────────────────────────────────────────────────────── */
 
-function go(key) {
+async function go(key) {
   const page = PAGES[key];
   if (!page) return;
+
+  // หน้าที่มีงานค้าง (เช่น จัดวางปุ่มบนแผนผังแล้วยังไม่บันทึก) ขอถามก่อนทิ้ง
+  const leaving = current && PAGES[current] && PAGES[current].mod;
+  if (leaving && leaving.confirmLeave && !(await leaving.confirmLeave())) {
+    if (location.hash !== '#/' + current) history.replaceState(null, '', '#/' + current);
+    return;
+  }
 
   if (!can(page.role)) {
     toast(page.role === 'admin' ? 'หน้านี้สำหรับผู้ดูแลระบบเท่านั้น'
